@@ -51,6 +51,7 @@ Communication is based on TLS using Tokio for asynchronous, high-performance net
     * Add caching and lease mechanism to improve performance and consistency
     
 ## Libraries:
-- Tokio - for highly concurrent servers
-- Tarpc/Tonic for RPC calls
+- tokio - for highly concurrent servers
+- quinn - for communication with servers using QUIC protocol
+- serde - for messages serialisation
 - sled / RocksDB for persisting metadata
