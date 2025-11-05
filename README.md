@@ -28,11 +28,11 @@ Communication is based on QUIC using Tokio for asynchronous, high-performance ne
     * Store chunks reliably on disk
     * Expose upload/download chunk API
 - Metadata server:
-    * Assume (for now) that all files are stored in a single folder
+    * Support a flat directory (single folder) for all files
     * Track chunk locations per file for download requests
 ### Phase 2:
 - Metadata server:
-    * Support a flat directory (single folder) for all files
+    * Add hierarchical directory support.
     * Implement garbage collection for deleted files
 - Storage server:
     * Implement chunk placement plan for uploads
