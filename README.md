@@ -5,7 +5,7 @@ This project implements a highly optimized distributed file storage system in Ru
 - Multiple racks hosting chunkservers (storage servers) that store encrypted file chunks
 - Secure client-side encryption and decryption, ensuring that only file owners can read file contents
 
-Communication is based on TLS using Tokio for asynchronous, high-performance networking. The system supports client login, file upload, and download functionalities.
+Communication is based on QUIC using Tokio for asynchronous, high-performance networking. The system supports client login, file upload, and download functionalities.
 
 ## System Worklow
 ### Uploading files
@@ -53,5 +53,3 @@ Communication is based on TLS using Tokio for asynchronous, high-performance net
 ## Libraries:
 - tokio - for highly concurrent servers
 - quinn - for communication with servers using QUIC protocol
-- serde - for messages serialisation
-- sled / RocksDB for persisting metadata
