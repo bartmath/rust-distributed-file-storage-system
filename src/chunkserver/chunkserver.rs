@@ -1,76 +1,94 @@
+use crate::common::{ChunkServerDiscoverPayload, HeartbeatPayload, MAX_MESSAGE_SIZE, Message};
+
 use bincode;
-use std::error::Error;
-use std::net::SocketAddr;
 use dashmap::DashMap;
+use quinn::{Connection, Endpoint, SendStream, ServerConfig};
+use std::net::SocketAddr;
 use std::sync::Arc;
-use quinn::{Connection, Endpoint, ServerConfig};
+use std::time::Duration;
+use tokio::time::sleep;
 use uuid::Uuid;
-use rust_fs::common::{ChunkServerDiscoverMessage, HeartbeatMessage};
 
-struct Chunk {
+struct Chunk {}
 
-}
-
-struct ChunkServer {
+pub struct ChunkServer {
     // The id of the chunkserver is assigned by metadataserver
     id: Option<Uuid>,
     rack_id: Uuid,
     chunks: Arc<DashMap<Uuid, Chunk>>,
+    heartbeat_interval: Duration,
 
-    clients_endpoint: Endpoint,
-    metadata_server_endpoint: Endpoint,
+    client_endpoint: Endpoint,
+    internal_endpoint: Endpoint,
 
     client_connections: Arc<DashMap<Uuid, Connection>>,
     metadata_server_connection: Option<Arc<Connection>>,
 }
 
 impl ChunkServer {
-    fn new(
+    pub fn new(
         rack_id: Uuid,
         clients_config: ServerConfig,
         clients_endpoint_addr: SocketAddr,
-        metadata_server_config: ServerConfig,
-        metadata_endpoint_addr: SocketAddr,
-    ) -> Result<Self, Box<dyn Error>> {
-        let clients_endpoint = Endpoint::server(clients_config, clients_endpoint_addr)?;
-        let metadata_server_endpoint = Endpoint::server(metadata_server_config, metadata_endpoint_addr)?;
-        Ok(ChunkServer{
+        heartbeat_interval: Duration,
+        internal_connections_config: ServerConfig,
+        internal_connections_addr: SocketAddr,
+    ) -> Self {
+        let clients_endpoint = Endpoint::server(clients_config, clients_endpoint_addr)
+            .expect("Couldn't create client endpoint");
+        let metadata_server_endpoint =
+            Endpoint::server(internal_connections_config, internal_connections_addr)
+                .expect("Couldn't create internal endpoint");
+
+        ChunkServer {
             id: None,
             rack_id,
             chunks: Arc::new(DashMap::new()),
-            clients_endpoint,
-            metadata_server_endpoint,
+            heartbeat_interval,
+            client_endpoint: clients_endpoint,
+            internal_endpoint: metadata_server_endpoint,
             client_connections: Arc::new(DashMap::new()),
             metadata_server_connection: None,
-        })
+        }
     }
 
-    async fn reestablish_metadata_server_connection(&self) -> anyhow::Result<()>  {
+    async fn reestablish_metadata_server_connection(&self) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn establish_metadata_server_connection(&self) -> anyhow::Result<()>  {
+    pub async fn establish_metadata_server_connection(&mut self) -> anyhow::Result<()> {
         self.reestablish_metadata_server_connection().await?;
 
-        let message = ChunkServerDiscoverMessage {
-            rack_id: self.rack_id
+        let message = ChunkServerDiscoverPayload {
+            rack_id: self.rack_id,
         };
 
         if let Some(conn) = self.metadata_server_connection.clone() {
-            let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
+            let (mut send_stream, recv_stream) = conn.open_bi().await?;
             let bytes = bincode::serialize(&message)?;
             send_stream.write_all(&bytes).await?;
 
+            match Message::from_stream(recv_stream, MAX_MESSAGE_SIZE).await? {
+                Message::AcceptNewChunkServerMessage(payload) => {
+                    self.id = Some(payload.chunkserver_new_id);
+                }
+                _ => {
+                    panic!("Invalid response received for the ChunkServer discover message");
+                }
+            };
+
+            self.send_heartbeat(send_stream).await?
         }
 
         Ok(())
     }
 
-    async fn send_heartbeat(self, metadata_server_addr: &str, id: &str) {
+    async fn send_heartbeat(&self, mut send_stream: SendStream) -> anyhow::Result<()> {
         loop {
-            let hb = HeartbeatMessage {self.rack_id};
-            send_to(metadata_server_addr, hb).await;
-            sleep(heartbeat_interval).await;
+            let message = HeartbeatPayload {};
+            let bytes = bincode::serialize(&message)?;
+            send_stream.write_all(&bytes).await?;
+            sleep(self.heartbeat_interval).await;
         }
     }
 }

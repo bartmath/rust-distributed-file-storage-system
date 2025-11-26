@@ -1,5 +1,5 @@
 [package]
-name = "rust_fs"
+name = "rust_dfss"
 authors = ['Bartosz Niedzwiedz']
 version = "0.1.0"
 edition = "2024"

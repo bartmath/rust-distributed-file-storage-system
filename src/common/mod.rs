@@ -1,11 +1,11 @@
 //#![cfg(any(feature = "rustls-aws-lc-rs", feature = "rustls-ring"))]
 //! Commonly used code in most examples.
 
-mod server;
 mod messages;
+mod server;
 
+pub use messages::*;
 pub use server::{CertificateProvider, certificate_provider};
-pub use messages::{HeartbeatMessage, ChunkServerDiscoverMessage};
 
 use quinn::{ClientConfig, Endpoint, ServerConfig};
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};

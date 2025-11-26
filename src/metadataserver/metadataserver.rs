@@ -1,5 +1,4 @@
 use quinn::Endpoint;
-use rust_fs::common::HeartbeatMessage;
 use uuid::Uuid;
 
 struct ChunkServerInfo {
@@ -17,5 +16,4 @@ struct Metadataserver {
     chunkservers_endpoint: Endpoint,
 }
 
-impl Metadataserver {
-}
+impl Metadataserver {}

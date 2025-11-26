@@ -13,7 +13,7 @@ use quinn::crypto::rustls::QuicClientConfig;
 use rustls::pki_types::CertificateDer;
 use url::Url;
 
-use rust_fs::common;
+use rust_dfss::common;
 
 /// HTTP/0.9 over QUIC client
 #[derive(Parser, Debug)]

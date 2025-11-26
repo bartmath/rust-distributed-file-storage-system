@@ -14,7 +14,7 @@ use quinn::crypto::rustls::QuicServerConfig;
 use tracing::{error, info, info_span};
 use tracing_futures::Instrument as _;
 
-use rust_fs::common;
+use rust_dfss::common;
 
 #[derive(Parser, Debug)]
 #[clap(name = "server")]
@@ -51,7 +51,7 @@ fn main() {
             .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
             .finish(),
     )
-        .unwrap();
+    .unwrap();
     let opt = Opt::parse();
     let code = {
         if let Err(e) = run(opt) {
@@ -97,9 +97,6 @@ async fn run(options: Opt) -> Result<()> {
             .is_some_and(|n| endpoint.open_connections() >= n)
         {
             info!("refusing due to open connection limit");
-            conn.refuse();
-        } else if Some(conn.remote_address()) == options.block {
-            info!("refusing blocked client IP address");
             conn.refuse();
         } else if options.stateless_retry && !conn.remote_address_validated() {
             info!("requiring connection to validate its address");
@@ -153,12 +150,12 @@ async fn handle_connection(root: Arc<Path>, conn: quinn::Incoming) -> Result<()>
                         error!("failed: {reason}", reason = e.to_string());
                     }
                 }
-                    .instrument(info_span!("request")),
+                .instrument(info_span!("request")),
             );
         }
     }
-        .instrument(span)
-        .await?;
+    .instrument(span)
+    .await?;
     Ok(())
 }
 

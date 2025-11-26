@@ -974,7 +974,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_fs"
+name = "rust_dfss"
 version = "0.1.0"
 dependencies = [
  "anyhow",
