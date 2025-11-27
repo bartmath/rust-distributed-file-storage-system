@@ -10,3 +10,5 @@ proc-macro = true
 quote = "1.0.42"
 syn = "2.0.111"
 serde = { version = "1.0.228", features = ["derive"] }
+bincode = "1.3"
+anyhow = "1.0.100"

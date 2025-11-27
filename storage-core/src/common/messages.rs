@@ -13,7 +13,7 @@ pub trait Message: TypeId {}  // empty for now
 
 pub const MAX_MESSAGE_SIZE: usize = 1024;
 
-impl Message {
+/*impl Message {
     pub async fn from_stream(
         mut stream: RecvStream,
         buffer_size: usize,
