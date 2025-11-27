@@ -1,33 +1,6 @@
-[package]
-name = "rust_dfss"
-authors = ['Bartosz Niedzwiedz']
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-tokio = { version = "1.41", features = ["full"] }
-quinn = "0.11"
-rustls = { version = "0.23", features = ["aws-lc-rs"] }
-anyhow = "1.0.100"
-clap = { version = "4.5.51", features = ["derive"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-futures = "0.2.5"
-url = "2.5.7"
-rcgen = "0.14.5"
-uuid = { version = "1.18.1", features = ["v4", "serde"] }
-dashmap = "7.0.0-rc2"
-serde = { version = "1.0.228", features = ["derive"] }
-bincode = "1.3"
-
-[[bin]]
-name="chunkserver"
-path = "src/chunkserver/main.rs"
-
-[[bin]]
-name="metadataserver"
-path = "src/metadataserver/main.rs"
-
-[[bin]]
-name="client"
-path = "src/client/main.rs"
+[workspace]
+members = [
+    "storage-macros",
+    "storage-core",
+]
+resolver = "2"

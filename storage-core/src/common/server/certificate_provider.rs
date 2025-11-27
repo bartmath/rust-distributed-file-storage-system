@@ -75,8 +75,8 @@ struct SelfSignedCertificateProvider;
 impl CertificateProvider for SelfSignedCertificateProvider {
     fn get_certificate(&self) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
         let path = std::env::current_dir()?;
-        let cert_path = path.join("../../../cert.der");
-        let key_path = path.join("../../../key.der");
+        let cert_path = path.join("cert.der");
+        let key_path = path.join("key.der");
         let (cert, key) = match fs::read(&cert_path).and_then(|x| Ok((x, fs::read(&key_path)?))) {
             Ok((cert, key)) => (
                 CertificateDer::from(cert),
@@ -84,7 +84,7 @@ impl CertificateProvider for SelfSignedCertificateProvider {
             ),
             Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
                 info!("generating self-signed certificate");
-                let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()])?;
+                let cert = rcgen::generate_simple_self_signed(vec!["debug.localhost".into()])?;
                 let key = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
                 let cert = cert.cert.into();
                 fs::create_dir_all(path).context("failed to create certificate directory")?;

@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use chunkserver::ChunkServer;
 use clap::Parser;
 use quinn::crypto::rustls::QuicServerConfig;
-use rust_dfss::common;
+use storage_core::common;
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -36,6 +36,9 @@ struct Opt {
     /// Address to listen on for connection from internal servers.
     #[clap(long = "internal socket address", default_value = "[::]:12346")]
     internal_socket_addr: SocketAddr,
+    /// Metadata server address for internal communication.
+    #[clap(long = "metadata server address", default_value = "[::1]:4433")]
+    metadata_server_addr: SocketAddr,
     /// Maximum number of concurrent connections to allow
     #[clap(long = "connection-limit")]
     connection_limit: Option<usize>,
@@ -103,6 +106,7 @@ async fn run(options: Opt) -> Result<()> {
         Duration::from_secs(60),
         internal_config,
         options.internal_socket_addr,
+        options.metadata_server_addr,
     );
 
     chunkserver.establish_metadata_server_connection().await?;
