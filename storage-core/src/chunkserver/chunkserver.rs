@@ -1,17 +1,17 @@
-use crate::common::{ChunkServerDiscoverPayload, HeartbeatPayload, MAX_MESSAGE_SIZE, Message};
-
+//use crate::common::{ClientMessage, MetadataServerMessage, ChunkserverMessage};
+use crate::common;
+use crate::common::*;
 use bincode;
 use dashmap::DashMap;
+use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{Connection, Endpoint, SendStream, ServerConfig};
+use rustls::pki_types::CertificateDer;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use quinn::crypto::rustls::QuicClientConfig;
-use rustls::pki_types::CertificateDer;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use uuid::Uuid;
-use crate::common;
 
 struct Chunk {}
 
@@ -22,8 +22,8 @@ pub struct ChunkServer {
     chunks: Arc<DashMap<Uuid, Chunk>>,
     heartbeat_interval: Duration,
 
-    client_endpoint: Endpoint,
-    internal_endpoint: Endpoint,
+    pub client_endpoint: Endpoint,
+    pub internal_endpoint: Endpoint,
 
     metadata_server_addr: SocketAddr,
 
@@ -51,7 +51,9 @@ impl ChunkServer {
         let cert_path = path.join("../../../cert.der");
         let server_cert_der = std::fs::read(&cert_path).expect("Read");
         let mut roots = rustls::RootCertStore::empty();
-        roots.add(CertificateDer::from(server_cert_der.as_ref())).expect("Hi");
+        roots
+            .add(CertificateDer::from(server_cert_der.as_ref()))
+            .expect("Hi");
 
         let mut client_crypto = rustls::ClientConfig::builder()
             .with_root_certificates(roots)
@@ -59,9 +61,9 @@ impl ChunkServer {
 
         client_crypto.alpn_protocols = common::ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-        let client_config =
-            quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto).expect("Elo")));
-
+        let client_config = quinn::ClientConfig::new(Arc::new(
+            QuicClientConfig::try_from(client_crypto).expect("Elo"),
+        ));
 
         internal_endpoint.set_default_client_config(client_config);
 
@@ -95,30 +97,26 @@ impl ChunkServer {
         self.reestablish_metadata_server_connection().await?;
         println!("Connected");
 
-        let message = ChunkServerDiscoverPayload {
+        let message = MetadataServerMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
             rack_id: self.rack_id,
-        };
+        });
 
         let connection_guard = self.metadata_server_connection.read().await;
 
-        /* if let Some(conn) = &*connection_guard {
+        if let Some(conn) = &*connection_guard {
             println!("Established metadata server connection - guard");
-            let (mut send_stream, recv_stream) = conn.open_bi().await?;
+            let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
             let bytes = bincode::serialize(&message)?;
             send_stream.write_all(&bytes).await?;
             println!("Message sent");
 
-            match Message::from_stream(recv_stream, MAX_MESSAGE_SIZE).await? {
-                Message::AcceptNewChunkServerMessage(payload) => {
+            match ChunkserverMessage::recv(&mut recv_stream).await? {
+                ChunkserverMessage::AcceptNewChunkServer(payload) => {
                     self.id = Some(payload.chunkserver_new_id);
                 }
-                _ => {
-                    panic!("Invalid response received for the ChunkServer discover message");
-                }
+                _ => panic!("Invalid response received for the ChunkServer discover message"),
             };
-
-            self.send_heartbeat(send_stream).await?
-        } */
+        }
 
         Ok(())
     }

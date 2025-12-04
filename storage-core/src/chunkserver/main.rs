@@ -4,13 +4,14 @@ use anyhow::{Result, bail};
 use chunkserver::ChunkServer;
 use clap::Parser;
 use quinn::crypto::rustls::QuicServerConfig;
-use storage_core::common;
+use quinn::{Connecting, Connection, Endpoint};
 use std::time::Duration;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
 };
+use storage_core::common;
 use uuid::Uuid;
 
 #[derive(Parser, Debug)]
@@ -56,8 +57,10 @@ fn main() {
     )
     .unwrap();
     let opt = Opt::parse();
+    let chunkserver = setup(opt).expect("TODO: panic message");
+
     let code = {
-        if let Err(e) = run(opt) {
+        if let Err(e) = run(chunkserver) {
             eprintln!("ERROR: {e}");
             1
         } else {
@@ -67,8 +70,7 @@ fn main() {
     std::process::exit(code);
 }
 
-#[tokio::main]
-async fn run(options: Opt) -> Result<()> {
+fn setup(options: Opt) -> Result<ChunkServer> {
     let certificate_provider = common::certificate_provider(options.key, options.cert)?;
     let (certs, key) = certificate_provider.get_certificate()?;
 
@@ -99,7 +101,7 @@ async fn run(options: Opt) -> Result<()> {
 
     eprintln!("listening on");
 
-    let mut chunkserver = ChunkServer::new(
+    Ok(ChunkServer::new(
         Uuid::new_v4(),
         client_config,
         options.client_socket_addr,
@@ -107,8 +109,30 @@ async fn run(options: Opt) -> Result<()> {
         internal_config,
         options.internal_socket_addr,
         options.metadata_server_addr,
-    );
+    ))
+}
 
+#[tokio::main]
+async fn run(mut chunkserver: ChunkServer) -> Result<()> {
     chunkserver.establish_metadata_server_connection().await?;
+}
+
+async fn run_internal_communication_loop(internal_endpoint: Endpoint) -> Result<()> {
     Ok(())
 }
+
+async fn run_client_communication_loop(
+    client_endpoint: Endpoint,
+    internal_endpoint: Endpoint,
+) -> Result<()> {
+    loop {
+        if let Some(incoming) = client_endpoint.accept().await {
+            if let Ok(conn) = incoming.accept() {
+                let cln = internal_endpoint.clone();
+                tokio::spawn(async move { handle_conn(conn, cln) });
+            }
+        }
+    }
+}
+
+async fn handle_conn(conn: Connecting, internal_endpoint: Endpoint) {}

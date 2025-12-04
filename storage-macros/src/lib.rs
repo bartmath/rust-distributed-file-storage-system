@@ -1,72 +1,97 @@
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
-use syn::{parse_macro_input, parse::ParseStream, Ident, Token};
-use std::vec::Vec;
+use quote::quote;
+use syn::{Data, DataEnum, DeriveInput, Fields, parse_macro_input};
 
-#[proc_macro]
-pub fn register_types(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as TypeList);
-
-    let mut id_impls = vec![];
-    let mut serialize_fns = vec![];
-    let mut deserialize_arms = vec![];
-
-    for (id, ty) in input.types.iter().enumerate() {
-        let fn_name = format_ident!("serialize_{}", ty.to_string().to_lowercase());
-        let id_u8 = id as u8;
-
-        // 1. TypeId impl (enforces Serialize+Deserialize bounds)
-        id_impls.push(quote! {
-            impl TypeId for #ty {
-                const ID: u8 = #id_u8;
-            }
-        });
-
-        // 2. Serialize helper
-        serialize_fns.push(quote! {
-            fn #fn_name(msg: &#ty, buf: &mut Vec<u8>) -> anyhow::Result<()> {
-                buf.push(#id_u8);
-
-                let options = bincode::DefaultOptions::new().allow_trailing_bytes().with_fixint_encoding();
-                options.serialize_into(&mut *buf, msg)?;
-                Ok(())
-            }
-        });
-
-        // 3. Deserialize match arm
-        deserialize_arms.push(quote! {
-            #id_u8 => {
-                Ok(bincode::deserialize::<#ty>(&payload)?)
-            }
-        });
-    }
+#[proc_macro_derive(ChunkPayload)]
+pub fn derive_chunk_payload(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
 
     let expanded = quote! {
-        // TypeId impls
-        #(#id_impls)*
+        impl MessagePayload for #name {
+            async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
+                let metadata_bytes = bincode::serialize(&self)?;
+                send.write_u32(metadata_bytes.len() as u32).await?;
+                send.write_all(&metadata_bytes).await?;
 
-        // Serialization helpers (one per type)
-        #(#serialize_fns)*
+                send.write_u64(self.data.len() as u64).await?;
+                send.write_all(&self.data).await?;
+
+                Ok(())
+            }
+
+            async fn recv_payload(recv: &mut RecvStream) -> Result<Self> {
+                let len = recv.read_u32().await?;
+                let mut buffer = vec![0u8; len as usize];
+                recv.read_exact(&mut buffer).await?;
+                let mut payload: Self = bincode::deserialize(&buffer)?;
+
+                let data_len = recv.read_u64().await?;
+                let mut data = vec![0u8; data_len as usize];
+                recv.read_exact(&mut data).await?;
+                payload.data = data;
+
+                Ok(payload)
+            }
+        }
     };
-
     TokenStream::from(expanded)
 }
 
-struct TypeList {
-    types: Vec<Ident>,
-}
+#[proc_macro_derive(Message)]
+pub fn derive_message_payload_enum(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
 
-impl syn::parse::Parse for TypeList {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut types = Vec::new();
-        types.push(input.parse()?);
-        while input.peek(Token![,]) {
-            input.parse::<Token![,]>()?;
-            if input.is_empty() {
-                break;
+    let (send_arms, recv_arms) = match input.data {
+        Data::Enum(DataEnum { variants, .. }) => {
+            let mut send_arms = Vec::new();
+            let mut recv_arms = Vec::new();
+
+            for (idx, variant) in variants.iter().enumerate() {
+                let variant_idx = idx as u8;
+                let variant_name = &variant.ident;
+
+                if let Fields::Unnamed(fields) = &variant.fields {
+                    if fields.unnamed.len() == 1 {
+                        let payload_ty = &fields.unnamed[0].ty;
+                        send_arms.push(quote! {
+                            #name::#variant_name(payload) => {
+                                send.write_u8(#variant_idx).await?;
+                                payload.send_payload(send).await?
+                            }
+                        });
+
+                        recv_arms.push(quote! {
+                            #variant_idx => Ok(#name::#variant_name(#payload_ty::recv_payload(recv).await?)),
+                        });
+                    }
+                }
             }
-            types.push(input.parse()?);
+
+            (send_arms, recv_arms)
         }
-        Ok(TypeList { types })
-    }
+        _ => panic!("Only enums with single unnamed field variants"),
+    };
+
+    let expanded = quote! {
+        impl Message for #name {
+            async fn send(&self, send: &mut SendStream) -> Result<()> {
+                match self {
+                    #(#send_arms)*
+                }
+                Ok(())
+            }
+
+            async fn recv(recv: &mut RecvStream) -> Result<Self> {
+                let variant_id = recv.read_u8().await?;
+                match variant_id {
+                    #(#recv_arms)*
+                    _ => anyhow::bail!("Unknown variant ID: {}", variant_id),
+                }
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
 }

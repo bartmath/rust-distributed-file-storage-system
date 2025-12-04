@@ -1,48 +1,48 @@
-use serde::{Serialize, Deserialize};
-use bincode::Options;
-use anyhow;
+/* use tokio::io::{duplex, DuplexStream};
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
-trait TypeId {
-    const ID: u8;
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+struct TestChunkPayload {
+    pub id: u32,
+    #[serde(skip)]
+    pub data: Vec<u8>,
 }
 
-// Test message types (must implement Serialize/Deserialize)
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct TestMsg1 {
-    id: u32,
+// Constructor function for the macro
+async fn add_chunk_data(payload: TestChunkPayload, chunk_data: Vec<u8>) -> Result<TestChunkPayload> {
+    Ok(TestChunkPayload {
+        id: payload.id,
+        data: chunk_data,
+    })
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct TestMsg2 {
-    name: String,
-}
+// Use macro to implement MessagePayload
+impl_chunk_payload!(TestChunkPayload, add_chunk_data);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct TestMsg3 {
-    vect: Vec<u8>,
-}
+#[tokio::test]
+async fn test_send_recv_chunk_payload() {
+    // Create a duplex in-memory stream pair
+    let (mut send, mut recv): (DuplexStream, DuplexStream) = duplex(1024);
 
-storage_macros::register_types! {
-    TestMsg1,
-    TestMsg2,
-    TestMsg3,
-}
+    // Create test object
+    let original = TestChunkPayload {
+        id: 42,
+        data: vec![1, 2, 3, 4, 5],
+    };
 
-#[test]
-fn test_register_messages_generates_impls() {
-    // Verify const IDs are correct (0, 1, ...)
-    assert_eq!(TestMsg1::ID, 0u8);
-    assert_eq!(TestMsg2::ID, 1u8);
-    assert_eq!(TestMsg3::ID, 2u8);
+    // Spawn sending task
+    let send_task = tokio::spawn(async move {
+        original.send_payload(&mut send).await.unwrap();
+    });
 
-    // Verify traits are implemented
-    fn requires_message_id<T: TypeId>() {}
-    requires_message_id::<TestMsg1>();
-    requires_message_id::<TestMsg2>();
-    requires_message_id::<TestMsg3>();
+    // Receive payload
+    let received = TestChunkPayload::recv_payload(&mut recv).await?;
 
-    fn requires_serialization<T: Serialize>() {}
-    requires_serialization::<TestMsg1>();
-    requires_serialization::<TestMsg2>();
-    requires_serialization::<TestMsg3>();
-}
+    // Wait for sender to finish
+    send_task.await.expect("Couldn't send payload");
+
+    // Assert fields equality
+    assert_eq!(received.id, 42);
+    assert_eq!(received.data, vec![1, 2, 3, 4, 5]);
+} */

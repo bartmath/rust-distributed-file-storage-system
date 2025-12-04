@@ -1,10 +1,11 @@
 //#![cfg(any(feature = "rustls-aws-lc-rs", feature = "rustls-ring"))]
 //! Commonly used code in most examples.
 
+pub mod message_payload;
 mod messages;
 mod server;
-mod message_payload;
 
+pub use message_payload::*;
 pub use messages::*;
 pub use server::{CertificateProvider, certificate_provider};
 
