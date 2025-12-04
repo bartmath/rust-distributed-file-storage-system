@@ -3,6 +3,7 @@
 
 mod messages;
 mod server;
+mod message_payload;
 
 pub use messages::*;
 pub use server::{CertificateProvider, certificate_provider};
