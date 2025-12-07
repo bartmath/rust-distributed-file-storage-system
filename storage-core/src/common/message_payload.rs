@@ -2,9 +2,12 @@ use anyhow::Result;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use storage_macros::ChunkPayload;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
+
+type ChunkId = Uuid;
 
 pub(crate) trait MessagePayload: Serialize + DeserializeOwned {
     async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
@@ -47,18 +50,24 @@ pub struct HeartbeatPayload {}
 /// Sends some data about the file to upload so that MetadataServer may decide
 /// where to store file's chunks.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ChunkPlacementRequestPayload {}
+pub struct ChunkPlacementRequestPayload {
+    pub filename: String,
+    pub file_size: usize,
+}
 
 /// Sent by MetadataServer to Client as a response to UploadChunkServersRequestPayload.
 /// Contains list of Chunkservers (with their addresses) where the chunks have to be stored.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ChunkPlacementResponsePayload {}
+pub struct ChunkPlacementResponsePayload {
+    pub chunkserver_addresses: Vec<(SocketAddr, ChunkId)>,
+}
 
 /// Sent from Client to Chunkserver.
 /// Contains a Chunks to be stored on the Chunkserver.
 #[derive(Serialize, Deserialize, Debug, ChunkPayload)]
 pub struct UploadChunkPayload {
-    pub chunk_id: [u8; 32],
+    pub chunk_id: ChunkId,
+    pub chunk_size: u64,
     // pub checksum: [u8; 32],
     // pub chunk_size: u64,
     //pub session_token: Vec<u8>,

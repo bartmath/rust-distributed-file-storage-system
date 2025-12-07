@@ -4,6 +4,7 @@
 pub mod message_payload;
 mod messages;
 mod server;
+mod types;
 
 pub use message_payload::*;
 pub use messages::*;

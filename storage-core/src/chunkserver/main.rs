@@ -1,10 +1,10 @@
 mod chunkserver;
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use chunkserver::ChunkServer;
 use clap::Parser;
 use quinn::crypto::rustls::QuicServerConfig;
-use quinn::{Connecting, Connection, Endpoint};
+use quinn::{Connecting, Endpoint};
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -12,6 +12,12 @@ use std::{
     sync::Arc,
 };
 use storage_core::common;
+use storage_core::common::ChunkserverMessage::{
+    AcceptNewChunkServer, DownloadChunkRequest, UploadChunk,
+};
+use storage_core::common::{ChunkserverMessage, Message};
+use tokio::fs;
+use tracing::info;
 use uuid::Uuid;
 
 #[derive(Parser, Debug)]
@@ -115,6 +121,13 @@ fn setup(options: Opt) -> Result<ChunkServer> {
 #[tokio::main]
 async fn run(mut chunkserver: ChunkServer) -> Result<()> {
     chunkserver.establish_metadata_server_connection().await?;
+
+    let internal_clone = chunkserver.internal_endpoint.clone();
+    tokio::spawn(async move { run_internal_communication_loop(internal_clone) });
+    tokio::spawn(async move {
+        run_client_communication_loop(chunkserver.client_endpoint, chunkserver.internal_endpoint)
+    });
+    Ok(())
 }
 
 async fn run_internal_communication_loop(internal_endpoint: Endpoint) -> Result<()> {
@@ -135,4 +148,38 @@ async fn run_client_communication_loop(
     }
 }
 
-async fn handle_conn(conn: Connecting, internal_endpoint: Endpoint) {}
+async fn handle_conn(client_connecting: Connecting, internal_endpoint: Endpoint) -> Result<()> {
+    let connection = client_connecting.await?;
+    loop {
+        let stream = connection.accept_bi().await;
+        let stream = match stream {
+            Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
+                info!("connection closed");
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(Error::from(e));
+            }
+            Ok(s) => s,
+        };
+        tokio::spawn(async move { handle_request(stream).await });
+    }
+}
+
+async fn handle_request(
+    (mut send, mut recv): (quinn::SendStream, quinn::RecvStream),
+) -> Result<()> {
+    match ChunkserverMessage::recv(&mut recv).await? {
+        UploadChunk(payload) => {
+            // TODO: to make everything faster, we may consider omitting the save to Vec,
+            // TODO: and stream the data to the file straight away
+            fs::write(payload.chunk_id.to_string(), payload.data).await?;
+        }
+        DownloadChunkRequest(payload) => {
+            todo!("handle download request")
+        }
+        AcceptNewChunkServer(_) => bail!("Chunkserver was already accepted"),
+    };
+
+    Ok(())
+}

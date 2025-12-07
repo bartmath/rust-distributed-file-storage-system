@@ -21,6 +21,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 bincode = "1.3"
 bytes = "1.11.0"
 storage-macros = { path = "../storage-macros" }
+moka = { version = "0.12.11", features = ["future"] }
 
 [[bin]]
 name="chunkserver"
