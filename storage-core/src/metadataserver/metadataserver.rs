@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use quinn::{Connection, Endpoint};
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 type Hostname = String;

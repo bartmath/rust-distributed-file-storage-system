@@ -1,3 +1,4 @@
+use crate::common::types::ChunkserverLocation;
 use anyhow::Result;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
@@ -6,7 +7,6 @@ use std::net::SocketAddr;
 use storage_macros::ChunkPayload;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
-use crate::common::types::ChunkserverLocation;
 
 type ChunkId = Uuid;
 

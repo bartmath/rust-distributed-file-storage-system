@@ -1,8 +1,8 @@
+use crate::common::ChunkserverLocation;
+use crate::metadataserver::metadataserver::ChunkserverMetadata;
 use rand::rng;
 use rand::seq::IndexedRandom;
 use std::net::SocketAddr;
-use crate::common::ChunkserverLocation;
-use crate::metadataserver::metadataserver::ChunkserverMetadata;
 
 type ServerLocation = SocketAddr;
 
@@ -33,12 +33,15 @@ impl PlacementStrategy for RandomPlacementStrategy {
     ) -> Vec<ChunkserverLocation> {
         let mut rng = rng();
 
-        available_servers
-            .choose_multiple(&mut rng, n_chunks)
-            .map(|chunkserver| ChunkserverLocation::new(
-                chunkserver.address,
-                chunkserver.hostname.clone(),
-            ))
+        (0..n_chunks)
+            .map(|_| {
+                available_servers
+                    .choose(&mut rng)
+                    .expect("No servers available yet")
+            })
+            .map(|chunkserver| {
+                ChunkserverLocation::new(chunkserver.address, chunkserver.hostname.clone())
+            })
             .collect()
     }
 }
