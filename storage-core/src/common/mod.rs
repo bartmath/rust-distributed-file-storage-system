@@ -9,6 +9,7 @@ mod types;
 pub use message_payload::*;
 pub use messages::*;
 pub use server::{CertificateProvider, certificate_provider};
+pub use types::ChunkserverLocation;
 
 use quinn::{ClientConfig, Endpoint, ServerConfig};
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};

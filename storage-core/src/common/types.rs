@@ -1,19 +1,21 @@
-use tokio::io::AsyncReadExt;
+use crate::common::{ChunkserverMessage, Message, UploadChunkPayload};
+use anyhow::bail;
+use moka::future::Cache;
+use quinn::{Connection, Endpoint};
 use std::collections::HashMap;
 use std::io::SeekFrom;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use anyhow::bail;
-use quinn::{Connection, Endpoint};
-use uuid::Uuid;
-use moka::future::Cache;
+use serde::{Deserialize, Serialize};
 use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
-use crate::common::{ChunkserverMessage, Message, UploadChunkPayload};
+use uuid::Uuid;
 
 type ChunkId = Uuid;
 type ServerLocation = SocketAddr;
 type ServerConnections = Cache<ServerLocation, Connection>;
+type Hostname = String;
 
 struct ClientState {
     endpoint: Endpoint,
@@ -22,21 +24,27 @@ struct ClientState {
     chunkserver_connections: ServerConnections,
 }
 
-struct ChunkLocation {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ChunkserverLocation {
     chunk_id: ChunkId,
     server_location: ServerLocation,
+    server_hostname: Hostname,
 }
 
-impl ChunkLocation {
-    fn with_metadata(
-        self,
-        file_path: String,
-        offset: u64,
-        chunk_size: u64,
-    ) -> SendChunkMetadata {
+impl ChunkserverLocation {
+    pub fn new(server_location: ServerLocation, server_hostname: Hostname) -> Self {
+        ChunkserverLocation {
+            chunk_id: Uuid::new_v4(),
+            server_location,
+            server_hostname,
+        }
+    }
+
+    fn with_metadata(self, file_path: String, offset: u64, chunk_size: u64) -> SendChunkMetadata {
         SendChunkMetadata {
             chunk_id: self.chunk_id,
             server_location: self.server_location,
+            server_hostname: self.server_hostname,
             file_path,
             offset,
             chunk_size,
@@ -44,20 +52,25 @@ impl ChunkLocation {
     }
 }
 
+#[derive(Debug)]
 struct SendChunkMetadata {
-    file_path: String,
     chunk_id: ChunkId,
     server_location: ServerLocation,
+    server_hostname: Hostname,
     offset: u64,
     chunk_size: u64,
+    file_path: String,
 }
 
 impl SendChunkMetadata {
-    async fn send(self, endpoint: Endpoint, connections: ServerConnections) -> anyhow::Result<ChunkId> {
-        // 1. Get Connection
+    async fn send(
+        self,
+        endpoint: Endpoint,
+        connections: ServerConnections,
+    ) -> anyhow::Result<ChunkId> {
         let conn = connections
             .try_get_with(self.server_location, async {
-                Self::connect_to_server(&endpoint, self.server_location).await
+                self.connect_to_server(&endpoint).await
             })
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect: {}", e))?;
@@ -67,8 +80,10 @@ impl SendChunkMetadata {
 
             // TODO: right now we only try to reconnect one time. In future, the metadataserver
             // TODO: might return some number of backup chunkservers, which will be used for in case of errors.
-            let new_conn = Self::connect_to_server(&endpoint, self.server_location).await?;
-            connections.insert(self.server_location, new_conn.clone()).await;
+            let new_conn = self.connect_to_server(&endpoint).await?;
+            connections
+                .insert(self.server_location, new_conn.clone())
+                .await;
 
             return self.send_chunk(new_conn).await;
         }
@@ -76,8 +91,8 @@ impl SendChunkMetadata {
         self.send_chunk(conn).await
     }
 
-    async fn connect_to_server(endpoint: &Endpoint, addr: SocketAddr) -> anyhow::Result<Connection> {
-        let connecting = endpoint.connect(addr, "localhost")?;
+    async fn connect_to_server(&self, endpoint: &Endpoint) -> anyhow::Result<Connection> {
+        let connecting = endpoint.connect(self.server_location, &self.server_hostname)?;
         let conn = connecting.await?;
         Ok(conn)
     }
@@ -107,7 +122,9 @@ impl SendChunkMetadata {
             let to_read = std::cmp::min(buf.len() as u64, remaining) as usize;
 
             let n = file.read(&mut buf[0..to_read]).await?;
-            if n == 0 { bail!("Chunk read to few bytes"); }
+            if n == 0 {
+                bail!("Chunk read to few bytes");
+            }
 
             send.write_all(&buf[0..n]).await?;
 

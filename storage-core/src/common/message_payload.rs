@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use storage_macros::ChunkPayload;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
+use crate::common::types::ChunkserverLocation;
 
 type ChunkId = Uuid;
 
@@ -59,7 +60,7 @@ pub struct ChunkPlacementRequestPayload {
 /// Contains list of Chunkservers (with their addresses) where the chunks have to be stored.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChunkPlacementResponsePayload {
-    pub chunkserver_addresses: Vec<(SocketAddr, ChunkId)>,
+    pub selected_chunkservers: Vec<ChunkserverLocation>,
 }
 
 /// Sent from Client to Chunkserver.
