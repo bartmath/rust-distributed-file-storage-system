@@ -8,7 +8,7 @@ mod types;
 
 pub use message_payload::*;
 pub use messages::*;
-pub use server::{CertificateProvider, certificate_provider};
+pub use server::{CertificateProvider, QuicServer, certificate_provider};
 pub use types::ChunkserverLocation;
 
 use quinn::{ClientConfig, Endpoint, ServerConfig};

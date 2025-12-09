@@ -62,33 +62,6 @@ impl ChunkserverInternal {
     }
 }
 
-pub(crate) struct ChunkserverExternal {
-    chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
-
-    client_endpoint: Arc<Endpoint>,
-    internal_endpoint: Arc<Endpoint>,
-
-    chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
-}
-
-impl ChunkserverExternal {
-    pub(crate) fn new(
-        chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
-        client_endpoint: Arc<Endpoint>,
-        internal_endpoint: Arc<Endpoint>,
-        chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
-    ) -> Self {
-        ChunkserverExternal {
-            chunks,
-            client_endpoint,
-            internal_endpoint,
-            chunkserver_connections,
-        }
-    }
-
-    pub async fn server_loop(&mut self) {}
-}
-
 impl ChunkserverInternal {
     async fn get_metadata_server_connection(&mut self) -> anyhow::Result<Connection> {
         let guard = self.metadata_server_connection.load();
@@ -161,6 +134,4 @@ impl ChunkserverInternal {
             sleep(self.heartbeat_interval).await;
         }
     }
-
-    pub async fn server_loop(&mut self) {}
 }
