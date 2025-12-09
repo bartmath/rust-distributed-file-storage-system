@@ -1,15 +1,9 @@
 use crate::common::{ChunkserverMessage, Message, UploadChunkPayload};
-use anyhow::bail;
 use moka::future::Cache;
 use quinn::{Connection, Endpoint};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::SeekFrom;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncSeekExt;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 type ChunkId = Uuid;
@@ -40,7 +34,11 @@ impl ChunkserverLocation {
         }
     }
 
-    fn with_metadata(self, file_path: String, offset: u64, chunk_size: u64) -> SendChunkMetadata {
+    fn with_file_path(self, file_path: PathBuf, chunk_size: u64) -> SendChunkMetadata {
+        self.with_metadata(file_path, 0, chunk_size)
+    }
+
+    fn with_metadata(self, file_path: PathBuf, offset: u64, chunk_size: u64) -> SendChunkMetadata {
         SendChunkMetadata {
             chunk_id: self.chunk_id,
             server_location: self.server_location,
@@ -59,7 +57,7 @@ struct SendChunkMetadata {
     server_hostname: Hostname,
     offset: u64,
     chunk_size: u64,
-    file_path: String,
+    file_path: PathBuf,
 }
 
 impl SendChunkMetadata {
@@ -98,38 +96,17 @@ impl SendChunkMetadata {
     }
 
     async fn send_chunk(self, conn: Connection) -> anyhow::Result<ChunkId> {
-        let data = vec![0u8; 0];
-
         let payload = UploadChunkPayload {
             chunk_id: self.chunk_id,
             chunk_size: self.chunk_size,
-            data,
+            offset: self.offset,
+            data: self.file_path,
         };
 
         let message = ChunkserverMessage::UploadChunk(payload);
-
-        let mut file = File::open(self.file_path).await?;
-        file.seek(SeekFrom::Start(self.offset)).await?;
-
         let (mut send, mut recv) = conn.open_bi().await?;
 
         message.send(&mut send).await?;
-        let mut buf = vec![0u8; 64 * 1024]; // 64kB
-        let mut sent = 0u64;
-
-        while sent < self.chunk_size {
-            let remaining = self.chunk_size - sent;
-            let to_read = std::cmp::min(buf.len() as u64, remaining) as usize;
-
-            let n = file.read(&mut buf[0..to_read]).await?;
-            if n == 0 {
-                bail!("Chunk read to few bytes");
-            }
-
-            send.write_all(&buf[0..n]).await?;
-
-            sent += n as u64;
-        }
         send.finish()?;
 
         Ok(self.chunk_id)

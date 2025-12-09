@@ -4,11 +4,16 @@ use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::OnceLock;
 use storage_macros::ChunkPayload;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 type ChunkId = Uuid;
+type RackId = String;
+
+pub static TMP_STORAGE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
 pub(crate) trait MessagePayload: Serialize + DeserializeOwned {
     async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
@@ -28,10 +33,14 @@ pub(crate) trait MessagePayload: Serialize + DeserializeOwned {
     }
 }
 
-/// Sent by Chunkserver to MetadataServer as first message.
+/// Sent by Chunkserver to MetadataServer as first message (or after reconnection with the MetadataServer).
+/// Contains introduction of the chunkserver, with data that make it identifiable
+/// and chunks that the Chunkserver stores.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChunkServerDiscoverPayload {
-    pub rack_id: Uuid,
+    pub server_id: Uuid,
+    pub rack_id: RackId,
+    pub stored_chunks: Vec<ChunkId>, // we will probably need to send also some other info about the chunk, not only the Id
 }
 
 /// Sent from MetadataServer to Chunkserver as a response to ChunkServerDiscoverPayload.
@@ -45,7 +54,11 @@ pub struct AcceptNewChunkServerPayload {
 /// Contains all data and statistics required by MetadataServer
 /// to make informed decision on chunks distribution between Chunkservers.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct HeartbeatPayload {}
+pub struct HeartbeatPayload {
+    pub server_id: Uuid,
+    pub active_client_connections: u32,
+    pub available_space_bytes: u64,
+}
 
 /// Sent by Client to MetadataServer.
 /// Sends some data about the file to upload so that MetadataServer may decide
@@ -69,12 +82,10 @@ pub struct ChunkPlacementResponsePayload {
 pub struct UploadChunkPayload {
     pub chunk_id: ChunkId,
     pub chunk_size: u64,
+    pub offset: u64, // helper for reconstructing the file
     // pub checksum: [u8; 32],
-    // pub chunk_size: u64,
-    //pub session_token: Vec<u8>,
-    // pub chunk_token: Vec<u8>,
     #[serde(skip)]
-    pub data: Vec<u8>,
+    pub data: PathBuf,
 }
 
 /// Sent from Client to MetadataServer.
@@ -96,8 +107,11 @@ pub struct DownloadChunkRequestPayload {}
 /// Contains chunk which have been requested by Client.
 #[derive(Serialize, Deserialize, Debug, ChunkPayload)]
 pub struct DownloadChunkResponsePayload {
+    pub chunk_id: ChunkId,
+    pub chunk_size: u64,
+    pub offset: u64, // helper for reconstructing the file
     #[serde(skip)]
-    pub data: Vec<u8>,
+    pub data: PathBuf,
 }
 
 // TODO: SECOND PHASE

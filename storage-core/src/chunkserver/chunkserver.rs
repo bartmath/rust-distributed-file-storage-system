@@ -1,133 +1,166 @@
-//use crate::common::{ClientMessage, MetadataServerMessage, ChunkserverMessage};
-use crate::common;
-use crate::common::*;
-use bincode;
-use dashmap::DashMap;
-use quinn::crypto::rustls::QuicClientConfig;
-use quinn::{Connection, Endpoint, SendStream, ServerConfig};
-use rustls::pki_types::CertificateDer;
+use arc_swap::ArcSwap;
+use quinn::{Connection, Endpoint, SendStream};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use storage_core::common::*;
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-struct Chunk {}
+type Hostname = String;
 
-pub struct ChunkServer {
-    // The id of the chunkserver is assigned by metadataserver
-    id: Option<Uuid>,
-    rack_id: Uuid,
-    chunks: Arc<DashMap<Uuid, Chunk>>,
+type ServerId = Uuid;
+type RackId = String;
+type ChunkId = Uuid;
+
+pub(crate) struct Chunk {}
+
+/// 'ChunkserverInternal' is a struct that is used for communication with 'MetadataServer' and other 'Chunkservers'
+/// # Tasks include:
+/// * sending stats to 'MetadataServer' via heartbeat
+/// * ensuring consistency of the states of all chunk's replicas across different 'Chunkservers'
+pub(crate) struct ChunkserverInternal {
+    server_id: ServerId,
+    rack_id: RackId,
+
     heartbeat_interval: Duration,
 
-    pub client_endpoint: Endpoint,
-    pub internal_endpoint: Endpoint,
+    chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
+
+    internal_endpoint: Arc<Endpoint>,
 
     metadata_server_addr: SocketAddr,
+    metadata_server_hostname: Hostname,
 
-    client_connections: Arc<DashMap<Uuid, Connection>>,
-    metadata_server_connection: Arc<RwLock<Option<Arc<Connection>>>>,
+    metadata_reconnect_lock: Mutex<()>,
+    metadata_server_connection: ArcSwap<Option<Connection>>,
+    chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
 }
 
-impl ChunkServer {
-    pub fn new(
-        rack_id: Uuid,
-        clients_config: ServerConfig,
-        clients_endpoint_addr: SocketAddr,
-        heartbeat_interval: Duration,
-        internal_connections_config: ServerConfig,
-        internal_connections_addr: SocketAddr,
+impl ChunkserverInternal {
+    pub(crate) fn new(
+        rack_id: RackId,
+        chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
+        internal_endpoint: Arc<Endpoint>,
         metadata_server_addr: SocketAddr,
+        metadata_server_hostname: Hostname,
+        chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
     ) -> Self {
-        let clients_endpoint = Endpoint::server(clients_config, clients_endpoint_addr)
-            .expect("Couldn't create client endpoint");
-        let mut internal_endpoint =
-            Endpoint::server(internal_connections_config, internal_connections_addr)
-                .expect("Couldn't create internal endpoint");
-
-        let path = std::env::current_dir().expect("Couldn't get current directory");
-        let cert_path = path.join("../../../cert.der");
-        let server_cert_der = std::fs::read(&cert_path).expect("Read");
-        let mut roots = rustls::RootCertStore::empty();
-        roots
-            .add(CertificateDer::from(server_cert_der.as_ref()))
-            .expect("Hi");
-
-        let mut client_crypto = rustls::ClientConfig::builder()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-
-        client_crypto.alpn_protocols = common::ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
-
-        let client_config = quinn::ClientConfig::new(Arc::new(
-            QuicClientConfig::try_from(client_crypto).expect("Elo"),
-        ));
-
-        internal_endpoint.set_default_client_config(client_config);
-
-        ChunkServer {
-            id: None,
+        ChunkserverInternal {
+            server_id: Uuid::new_v4(),
             rack_id,
-            chunks: Arc::new(DashMap::new()),
-            heartbeat_interval,
-            client_endpoint: clients_endpoint,
+            heartbeat_interval: Duration::from_secs(180),
+            chunks,
             internal_endpoint,
             metadata_server_addr,
-            client_connections: Arc::new(DashMap::new()),
-            metadata_server_connection: Arc::new(RwLock::new(None)),
+            metadata_server_hostname,
+            metadata_reconnect_lock: Mutex::new(()),
+            metadata_server_connection: ArcSwap::new(Arc::new(None)),
+            chunkserver_connections,
+        }
+    }
+}
+
+pub(crate) struct ChunkserverExternal {
+    chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
+
+    client_endpoint: Arc<Endpoint>,
+    internal_endpoint: Arc<Endpoint>,
+
+    chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
+}
+
+impl ChunkserverExternal {
+    pub(crate) fn new(
+        chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
+        client_endpoint: Arc<Endpoint>,
+        internal_endpoint: Arc<Endpoint>,
+        chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
+    ) -> Self {
+        ChunkserverExternal {
+            chunks,
+            client_endpoint,
+            internal_endpoint,
+            chunkserver_connections,
         }
     }
 
-    async fn reestablish_metadata_server_connection(&mut self) -> anyhow::Result<()> {
-        let connecting = self
-            .internal_endpoint
-            .connect(self.metadata_server_addr, "debug.localhost")?;
-        let connection = connecting.await?;
+    pub async fn server_loop(&mut self) {}
+}
 
-        let mut guard = self.metadata_server_connection.write().await;
-        *guard = Some(Arc::new(connection));
+impl ChunkserverInternal {
+    async fn get_metadata_server_connection(&mut self) -> anyhow::Result<Connection> {
+        let guard = self.metadata_server_connection.load();
 
-        Ok(())
+        let Some(conn) = guard
+            .as_ref()
+            .as_ref()
+            .filter(|c| c.close_reason().is_none())
+        else {
+            drop(guard);
+            return self.reestablish_metadata_server_connection().await;
+        };
+
+        Ok(conn.clone())
+    }
+    async fn reestablish_metadata_server_connection(&self) -> anyhow::Result<Connection> {
+        // We use Mutex to prevent many threads to simultaneously tring to create new connection
+        // with the MetadataServer.
+        let lock = self.metadata_reconnect_lock.lock().await;
+
+        let conn = self.metadata_server_connection.load();
+        let Some(conn) = conn
+            .as_ref()
+            .as_ref()
+            .filter(|x| x.close_reason().is_none())
+        else {
+            let connecting = self
+                .internal_endpoint
+                .connect(self.metadata_server_addr, &self.metadata_server_hostname)?;
+            let new_conn = connecting.await?;
+
+            self.metadata_server_connection
+                .store(Arc::new(Some(new_conn.clone())));
+
+            drop(lock);
+
+            self.metadata_server_handshake(new_conn.clone()).await?;
+
+            return Ok(new_conn);
+        };
+
+        Ok(conn.clone())
     }
 
-    pub async fn establish_metadata_server_connection(&mut self) -> anyhow::Result<()> {
-        println!("Establishing metadata server connection");
-        self.reestablish_metadata_server_connection().await?;
-        println!("Connected");
-
+    async fn metadata_server_handshake(
+        &self,
+        metadata_server_conn: Connection,
+    ) -> anyhow::Result<()> {
         let message = MetadataServerMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
-            rack_id: self.rack_id,
+            rack_id: self.rack_id.clone(),
+            server_id: self.server_id,
+            stored_chunks: vec![],
         });
 
-        let connection_guard = self.metadata_server_connection.read().await;
+        let mut send_stream = metadata_server_conn.open_uni().await?;
 
-        if let Some(conn) = &*connection_guard {
-            println!("Established metadata server connection - guard");
-            let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
-            let bytes = bincode::serialize(&message)?;
-            send_stream.write_all(&bytes).await?;
-            println!("Message sent");
+        message.send(&mut send_stream).await
 
-            match ChunkserverMessage::recv(&mut recv_stream).await? {
-                ChunkserverMessage::AcceptNewChunkServer(payload) => {
-                    self.id = Some(payload.chunkserver_new_id);
-                }
-                _ => panic!("Invalid response received for the ChunkServer discover message"),
-            };
-        }
-
-        Ok(())
+        // TODO: maybe the metadata server will return some answer
     }
 
     async fn send_heartbeat(&self, mut send_stream: SendStream) -> anyhow::Result<()> {
         loop {
-            let message = HeartbeatPayload {};
-            let bytes = bincode::serialize(&message)?;
-            send_stream.write_all(&bytes).await?;
-            println!("Sending Heartbeat message");
+            let message = MetadataServerMessage::Heartbeat(HeartbeatPayload {
+                server_id: self.server_id,
+                active_client_connections: 1,
+                available_space_bytes: 64 * 1024 * 1024,
+            });
+            message.send(&mut send_stream).await?;
             sleep(self.heartbeat_interval).await;
         }
     }
+
+    pub async fn server_loop(&mut self) {}
 }

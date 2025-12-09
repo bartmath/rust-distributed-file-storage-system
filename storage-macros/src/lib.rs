@@ -10,28 +10,72 @@ pub fn derive_chunk_payload(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl MessagePayload for #name {
             async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
+                use tokio::io::AsyncWriteExt as _;
+                use tokio::io::AsyncReadExt as _;
+                use tokio::io::AsyncSeekExt as _;
+
                 let metadata_bytes = bincode::serialize(&self)?;
                 send.write_u32(metadata_bytes.len() as u32).await?;
                 send.write_all(&metadata_bytes).await?;
 
-                send.write_u64(self.data.len() as u64).await?;
-                send.write_all(&self.data).await?;
+                let mut file = tokio::fs::File::open(&self.data).await?;
+                if self.offset > 0 {
+                    file.seek(std::io::SeekFrom::Start(self.offset)).await?;
+                }
+
+                let mut buf = vec![0u8; 64 * 1024]; // 64kB
+                let mut sent = 0u64;
+
+                while sent < self.chunk_size {
+                    let remaining = self.chunk_size - sent;
+                    let to_read = std::cmp::min(buf.len() as u64, remaining) as usize;
+
+                    let n = file.read(&mut buf[0..to_read]).await?;
+                    if n == 0 {
+                        anyhow::bail!("Chunk read to few bytes");
+                    }
+
+                    send.write_all(&buf[0..n]).await?;
+
+                    sent += n as u64;
+                }
 
                 Ok(())
             }
 
             async fn recv_payload(recv: &mut RecvStream) -> Result<Self> {
+                use tokio::io::AsyncReadExt as _; // dla read_exact
+                use tokio::io::AsyncWriteExt as _;
+
                 let len = recv.read_u32().await?;
+
                 let mut buffer = vec![0u8; len as usize];
                 recv.read_exact(&mut buffer).await?;
                 let mut payload: Self = bincode::deserialize(&buffer)?;
 
-                let data_len = recv.read_u64().await?;
-                let mut data = vec![0u8; data_len as usize];
-                recv.read_exact(&mut data).await?;
-                payload.data = data;
+                let data_len = payload.chunk_size;
+                let tmp_storage_pth = TMP_STORAGE_ROOT.get().expect("Temporary storage not initialized via config");
+                let tmp_path = tmp_storage_pth.join(payload.chunk_id.to_string());
+                payload.data = tmp_path;
+
+                let file = tokio::fs::File::create(&payload.data).await?;
+                file.set_len(data_len).await?;
+                let mut writer = tokio::io::BufWriter::with_capacity(64 * 1024, file); // 64 kB
+                let mut limited_recv = recv.take(data_len);
+                tokio::io::copy(&mut limited_recv, &mut writer).await?;
+                writer.flush().await?;
+
+                writer.into_inner().sync_all().await?;
 
                 Ok(payload)
+            }
+        }
+
+        impl Drop for #name {
+            fn drop(&mut self) {
+                if self.data.exists() {
+                    let _ = std::fs::remove_file(&self.data);
+                }
             }
         }
     };
