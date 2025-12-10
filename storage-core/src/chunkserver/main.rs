@@ -16,25 +16,11 @@ fn main() {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::FmtSubscriber::builder()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .finish(),
-    )
-    .unwrap();
     let opt = ChunkserverOpt::parse();
     let (internal_chunkservers, external_chunkserver) =
         chunkserver_setup(opt).expect("TODO: Couldn't setup chunkservers");
 
-    let code = {
-        if let Err(e) = run(internal_chunkservers, external_chunkserver) {
-            eprintln!("ERROR: {e}");
-            1
-        } else {
-            0
-        }
-    };
-    std::process::exit(code);
+    let _ = run(internal_chunkservers, external_chunkserver).expect("Server crashed");
 }
 
 #[tokio::main]
