@@ -1,0 +1,4 @@
+**/target
+.idea/
+cert.der
+key.der
