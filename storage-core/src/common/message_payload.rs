@@ -1,9 +1,8 @@
-use crate::common::types::ChunkserverLocation;
+use crate::common::chunk_send::ChunkserverLocation;
 use anyhow::Result;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use storage_macros::ChunkPayload;
@@ -14,6 +13,7 @@ type ChunkId = Uuid;
 type RackId = String;
 
 pub static TMP_STORAGE_ROOT: OnceLock<PathBuf> = OnceLock::new();
+pub static FINAL_STORAGE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
 pub(crate) trait MessagePayload: Serialize + DeserializeOwned {
     async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
@@ -40,7 +40,7 @@ pub(crate) trait MessagePayload: Serialize + DeserializeOwned {
 pub struct ChunkServerDiscoverPayload {
     pub server_id: Uuid,
     pub rack_id: RackId,
-    pub stored_chunks: Vec<ChunkId>, // we will probably need to send also some other info about the chunk, not only the Id
+    pub stored_chunks: Vec<ChunkId>, // we will probably need to send also some other info about the chunk, not only the id
 }
 
 /// Sent from MetadataServer to Chunkserver as a response to ChunkServerDiscoverPayload.

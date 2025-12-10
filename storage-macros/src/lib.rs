@@ -54,9 +54,11 @@ pub fn derive_chunk_payload(input: TokenStream) -> TokenStream {
                 let mut payload: Self = bincode::deserialize(&buffer)?;
 
                 let data_len = payload.chunk_size;
-                let tmp_storage_pth = TMP_STORAGE_ROOT.get().expect("Temporary storage not initialized via config");
-                let tmp_path = tmp_storage_pth.join(payload.chunk_id.to_string());
-                payload.data = tmp_path;
+
+                payload.data = TMP_STORAGE_ROOT
+                    .get()
+                    .expect("Temporary storage not initialized via config")
+                    .join(payload.chunk_id.to_string());
 
                 let file = tokio::fs::File::create(&payload.data).await?;
                 file.set_len(data_len).await?;
@@ -120,14 +122,14 @@ pub fn derive_message_payload_enum(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl Message for #name {
-            async fn send(&self, send: &mut SendStream) -> Result<()> {
+            async fn send(&self, send: &mut SendStream) -> anyhow::Result<()> {
                 match self {
                     #(#send_arms)*
                 }
                 Ok(())
             }
 
-            async fn recv(recv: &mut RecvStream) -> Result<Self> {
+            async fn recv(recv: &mut RecvStream) -> anyhow::Result<Self> {
                 let variant_id = recv.read_u8().await?;
                 match variant_id {
                     #(#recv_arms)*

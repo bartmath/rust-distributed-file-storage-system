@@ -1,10 +1,10 @@
 mod config;
-mod external_chunkserver;
-mod internal_chunkserver;
+mod external;
+mod internal;
 mod setup;
 
-use crate::external_chunkserver::ChunkserverInternal;
-use crate::internal_chunkserver::ChunkserverExternal;
+use crate::external::ChunkserverExternal;
+use crate::internal::ChunkserverInternal;
 use anyhow::Result;
 use clap::Parser;
 use config::ChunkserverOpt;
@@ -39,13 +39,13 @@ fn main() {
 
 #[tokio::main]
 async fn run(
-    mut internal_chunkserver: ChunkserverInternal,
-    mut external_chunkserver: ChunkserverExternal,
+    internal_chunkserver: ChunkserverInternal,
+    external_chunkserver: ChunkserverExternal,
 ) -> Result<()> {
     let internal_handle = tokio::spawn(async move { internal_chunkserver.run().await });
     let external_handle = tokio::spawn(async move { external_chunkserver.run().await });
 
     // If one of the sides of the server crashes, we want to exit immediately.
-    tokio::try_join!(internal_handle, external_handle)?;
+    let _ = tokio::try_join!(internal_handle, external_handle)?;
     Ok(())
 }

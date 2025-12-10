@@ -21,10 +21,14 @@ pub enum MetadataServerMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize, Message)]
-pub enum ChunkserverMessage {
-    AcceptNewChunkServer(AcceptNewChunkServerPayload),
+pub enum ChunkserverExternalMessage {
     UploadChunk(UploadChunkPayload),
     DownloadChunkRequest(DownloadChunkRequestPayload),
+}
+
+#[derive(Debug, Serialize, Deserialize, Message)]
+pub enum ChunkserverInternalMessage {
+    AcceptNewChunkserver(AcceptNewChunkServerPayload),
 }
 
 #[derive(Debug, Serialize, Deserialize, Message)]

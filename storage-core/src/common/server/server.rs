@@ -6,7 +6,11 @@ use quinn::{Connecting, Endpoint, RecvStream, SendStream};
 pub trait QuicServer: Send + Sync + Clone + 'static {
     fn listening_endpoint(&self) -> &Endpoint;
 
+    async fn setup(&self) -> Result<()>;
+
     async fn run(&self) -> Result<()> {
+        self.setup().await?;
+
         let endpoint = self.listening_endpoint();
         loop {
             if let Some(incoming) = endpoint.accept().await {

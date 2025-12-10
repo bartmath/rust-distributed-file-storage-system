@@ -1,9 +1,12 @@
+use crate::internal::chunkserver_definition::{Chunk, ChunkserverInternal};
 use arc_swap::ArcSwap;
-use quinn::{Connection, Endpoint, SendStream};
+use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use storage_core::common::*;
+use storage_core::common::{
+    ChunkServerDiscoverPayload, HeartbeatPayload, Message, MetadataServerMessage,
+};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -14,28 +17,21 @@ type ServerId = Uuid;
 type RackId = String;
 type ChunkId = Uuid;
 
-pub(crate) struct Chunk {}
-
-/// 'ChunkserverInternal' is a struct that is used for communication with 'MetadataServer' and other 'Chunkservers'
-/// # Tasks include:
-/// * sending stats to 'MetadataServer' via heartbeat
-/// * ensuring consistency of the states of all chunk's replicas across different 'Chunkservers'
-pub(crate) struct ChunkserverInternal {
-    server_id: ServerId,
-    rack_id: RackId,
-
-    heartbeat_interval: Duration,
-
-    chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
-
-    internal_endpoint: Arc<Endpoint>,
-
-    metadata_server_addr: SocketAddr,
-    metadata_server_hostname: Hostname,
-
-    metadata_reconnect_lock: Mutex<()>,
-    metadata_server_connection: ArcSwap<Option<Connection>>,
-    chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
+impl Clone for ChunkserverInternal {
+    fn clone(&self) -> Self {
+        ChunkserverInternal {
+            server_id: self.server_id,
+            rack_id: self.rack_id.clone(),
+            heartbeat_interval: self.heartbeat_interval,
+            chunks: self.chunks.clone(),
+            internal_endpoint: self.internal_endpoint.clone(),
+            metadata_server_addr: self.metadata_server_addr,
+            metadata_server_hostname: self.metadata_server_hostname.clone(),
+            metadata_reconnect_lock: self.metadata_reconnect_lock.clone(),
+            metadata_server_connection: self.metadata_server_connection.clone(),
+            chunkserver_connections: self.chunkserver_connections.clone(),
+        }
+    }
 }
 
 impl ChunkserverInternal {
@@ -55,14 +51,12 @@ impl ChunkserverInternal {
             internal_endpoint,
             metadata_server_addr,
             metadata_server_hostname,
-            metadata_reconnect_lock: Mutex::new(()),
-            metadata_server_connection: ArcSwap::new(Arc::new(None)),
+            metadata_reconnect_lock: Arc::new(Mutex::new(())),
+            metadata_server_connection: Arc::new(ArcSwap::from_pointee(None)),
             chunkserver_connections,
         }
     }
-}
 
-impl ChunkserverInternal {
     async fn get_metadata_server_connection(&mut self) -> anyhow::Result<Connection> {
         let guard = self.metadata_server_connection.load();
 
@@ -123,14 +117,17 @@ impl ChunkserverInternal {
         // TODO: maybe the metadata server will return some answer
     }
 
-    async fn send_heartbeat(&self, mut send_stream: SendStream) -> anyhow::Result<()> {
+    pub(crate) async fn send_heartbeat(&mut self) -> anyhow::Result<()> {
+        let conn = self.get_metadata_server_connection().await?;
+        let (mut send, recv) = conn.open_bi().await?;
+
         loop {
             let message = MetadataServerMessage::Heartbeat(HeartbeatPayload {
                 server_id: self.server_id,
-                active_client_connections: 1,
+                active_client_connections: 1, // TODO: fetch those values in future
                 available_space_bytes: 64 * 1024 * 1024,
             });
-            message.send(&mut send_stream).await?;
+            message.send(&mut send).await?;
             sleep(self.heartbeat_interval).await;
         }
     }

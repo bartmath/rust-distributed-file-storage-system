@@ -1,6 +1,6 @@
 use super::config::ChunkserverOpt;
-use super::external_chunkserver::ChunkserverInternal;
-use crate::internal_chunkserver::ChunkserverExternal;
+use crate::external::ChunkserverExternal;
+use crate::internal::ChunkserverInternal;
 use anyhow::{Result, bail};
 use quinn::Endpoint;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
