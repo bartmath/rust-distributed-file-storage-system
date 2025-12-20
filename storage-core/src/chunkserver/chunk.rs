@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-pub type ChunkId = Uuid;
+pub(crate) type ChunkId = Uuid;
 
 pub(crate) struct Chunk {
     pub(crate) id: ChunkId,

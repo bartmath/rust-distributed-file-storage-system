@@ -10,17 +10,13 @@ pub fn derive_chunk_payload(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl MessagePayload for #name {
             async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
-                use tokio::io::AsyncWriteExt as _;
-                use tokio::io::AsyncReadExt as _;
-                use tokio::io::AsyncSeekExt as _;
-
                 let metadata_bytes = bincode::serialize(&self)?;
                 send.write_u32(metadata_bytes.len() as u32).await?;
                 send.write_all(&metadata_bytes).await?;
 
                 let mut file = tokio::fs::File::open(&self.data).await?;
                 if self.offset > 0 {
-                    file.seek(std::io::SeekFrom::Start(self.offset)).await?;
+                    tokio::io::AsyncSeekExt::seek(&mut file, std::io::SeekFrom::Start(self.offset)).await?;
                 }
 
                 let mut buf = vec![0u8; 64 * 1024]; // 64kB
@@ -44,9 +40,6 @@ pub fn derive_chunk_payload(input: TokenStream) -> TokenStream {
             }
 
             async fn recv_payload(recv: &mut RecvStream) -> Result<Self> {
-                use tokio::io::AsyncReadExt as _; // dla read_exact
-                use tokio::io::AsyncWriteExt as _;
-
                 let len = recv.read_u32().await?;
 
                 let mut buffer = vec![0u8; len as usize];
