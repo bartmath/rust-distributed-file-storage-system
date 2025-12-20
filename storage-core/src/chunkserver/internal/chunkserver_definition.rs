@@ -1,3 +1,4 @@
+use crate::chunk::{Chunk, ChunkId};
 use arc_swap::ArcSwap;
 use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;
@@ -10,9 +11,6 @@ type Hostname = String;
 
 type ServerId = Uuid;
 type RackId = String;
-type ChunkId = Uuid;
-
-pub(crate) struct Chunk {}
 
 /// 'ChunkserverInternal' is a struct that is used for communication with 'MetadataServer' and other 'Chunkservers'
 /// # Tasks include:

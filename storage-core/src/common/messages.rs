@@ -36,4 +36,5 @@ pub enum ClientMessage {
     ChunkPlacementResponse(ChunkPlacementResponsePayload),
     GetChunkPlacementResponse(GetChunkPlacementResponsePayload),
     DownloadChunkResponse(DownloadChunkResponsePayload),
+    RequestStatus(RequestStatusPayload),
 }

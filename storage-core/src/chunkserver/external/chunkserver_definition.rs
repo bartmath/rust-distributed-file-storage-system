@@ -1,4 +1,4 @@
-use crate::internal::chunkserver_definition::Chunk;
+use crate::chunk::Chunk;
 use quinn::{Connection, Endpoint};
 use std::sync::Arc;
 use uuid::Uuid;

@@ -82,8 +82,9 @@ pub struct ChunkPlacementResponsePayload {
 pub struct UploadChunkPayload {
     pub chunk_id: ChunkId,
     pub chunk_size: u64,
-    pub offset: u64, // helper for reconstructing the file
     // pub checksum: [u8; 32],
+    #[serde(skip)]
+    pub offset: u64, // helper for reconstructing the file
     #[serde(skip)]
     pub data: PathBuf,
 }
@@ -101,7 +102,9 @@ pub struct GetChunkPlacementResponsePayload {}
 /// Sent from Client to ChunkServer.
 /// Contains list of chunk ids which it wants to download from the ChunkServer.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct DownloadChunkRequestPayload {}
+pub struct DownloadChunkRequestPayload {
+    pub chunk_id: ChunkId,
+}
 
 /// Sent from Chunkserver to Client as a response to GetChunksRequestPayload.
 /// Contains chunk which have been requested by Client.
@@ -109,9 +112,18 @@ pub struct DownloadChunkRequestPayload {}
 pub struct DownloadChunkResponsePayload {
     pub chunk_id: ChunkId,
     pub chunk_size: u64,
+    #[serde(skip)]
     pub offset: u64, // helper for reconstructing the file
     #[serde(skip)]
     pub data: PathBuf,
+}
+
+/// Sent from any server to a client when no other response would be sent.
+#[derive(Serialize, Deserialize, Debug)]
+pub enum RequestStatusPayload {
+    Ok,
+    InvalidRequest,
+    InternalServerError,
 }
 
 // TODO: SECOND PHASE
@@ -140,3 +152,5 @@ impl MessagePayload for DeleteFileRequestMessage {}
 impl MessagePayload for ListFilesInFolderRequestMessage {}
 impl MessagePayload for ListFilesInFolderResponseMessage {}
 impl MessagePayload for DownloadChunkRequestPayload {}
+
+impl MessagePayload for RequestStatusPayload {}

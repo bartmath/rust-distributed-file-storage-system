@@ -1,4 +1,5 @@
-use crate::internal::chunkserver_definition::{Chunk, ChunkserverInternal};
+use crate::chunk::Chunk;
+use crate::internal::chunkserver_definition::ChunkserverInternal;
 use arc_swap::ArcSwap;
 use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;

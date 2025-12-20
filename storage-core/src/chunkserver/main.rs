@@ -1,3 +1,4 @@
+mod chunk;
 mod config;
 mod external;
 mod internal;
