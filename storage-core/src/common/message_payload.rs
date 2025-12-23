@@ -126,19 +126,20 @@ pub enum RequestStatusPayload {
     InternalServerError,
 }
 
-// TODO: SECOND PHASE
-
+/// Sent (with/once after logging) from client to MetadataServer
+/// (for now, we could offload it to a separate server)
+/// to get client's folder structure.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct CreateFolderRequestMessage {}
+pub struct GetClientFolderStructureRequestPayload {}
 
+/// Sent from MetadataServer to Client as a response to GetClientFolderStructureRequestPayload.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct DeleteFileRequestMessage {}
+pub struct GetClientFolderStructureResponsePayload {}
 
+/// Sent at the end of the client session (and once every some interval e.g. 10mins)
+/// to MetadataServer with any updates to client's folder structure.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ListFilesInFolderRequestMessage {}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ListFilesInFolderResponseMessage {}
+pub struct SendClientFolderStructurePayload {}
 
 impl MessagePayload for AcceptNewChunkServerPayload {}
 impl MessagePayload for ChunkServerDiscoverPayload {}
@@ -147,10 +148,8 @@ impl MessagePayload for ChunkPlacementRequestPayload {}
 impl MessagePayload for GetChunkPlacementRequestPayload {}
 impl MessagePayload for ChunkPlacementResponsePayload {}
 impl MessagePayload for GetChunkPlacementResponsePayload {}
-impl MessagePayload for CreateFolderRequestMessage {}
-impl MessagePayload for DeleteFileRequestMessage {}
-impl MessagePayload for ListFilesInFolderRequestMessage {}
-impl MessagePayload for ListFilesInFolderResponseMessage {}
 impl MessagePayload for DownloadChunkRequestPayload {}
-
 impl MessagePayload for RequestStatusPayload {}
+impl MessagePayload for GetClientFolderStructureRequestPayload {}
+impl MessagePayload for GetClientFolderStructureResponsePayload {}
+impl MessagePayload for SendClientFolderStructurePayload {}

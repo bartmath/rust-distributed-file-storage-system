@@ -1,12 +1,12 @@
 use crate::chunk::Chunk;
-use crate::internal::chunkserver_definition::ChunkserverInternal;
+use crate::internal::definition::ChunkserverInternal;
 use arc_swap::ArcSwap;
 use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use storage_core::common::{
-    ChunkServerDiscoverPayload, HeartbeatPayload, Message, MetadataServerMessage,
+    ChunkServerDiscoverPayload, HeartbeatPayload, Message, MetadataServerInternalMessage,
 };
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -17,23 +17,6 @@ type Hostname = String;
 type ServerId = Uuid;
 type RackId = String;
 type ChunkId = Uuid;
-
-impl Clone for ChunkserverInternal {
-    fn clone(&self) -> Self {
-        ChunkserverInternal {
-            server_id: self.server_id,
-            rack_id: self.rack_id.clone(),
-            heartbeat_interval: self.heartbeat_interval,
-            chunks: self.chunks.clone(),
-            internal_endpoint: self.internal_endpoint.clone(),
-            metadata_server_addr: self.metadata_server_addr,
-            metadata_server_hostname: self.metadata_server_hostname.clone(),
-            metadata_reconnect_lock: self.metadata_reconnect_lock.clone(),
-            metadata_server_connection: self.metadata_server_connection.clone(),
-            chunkserver_connections: self.chunkserver_connections.clone(),
-        }
-    }
-}
 
 impl ChunkserverInternal {
     pub(crate) fn new(
@@ -105,11 +88,12 @@ impl ChunkserverInternal {
         &self,
         metadata_server_conn: Connection,
     ) -> anyhow::Result<()> {
-        let message = MetadataServerMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
-            rack_id: self.rack_id.clone(),
-            server_id: self.server_id,
-            stored_chunks: vec![],
-        });
+        let message =
+            MetadataServerInternalMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
+                rack_id: self.rack_id.clone(),
+                server_id: self.server_id,
+                stored_chunks: vec![],
+            });
 
         let mut send_stream = metadata_server_conn.open_uni().await?;
 
@@ -123,7 +107,7 @@ impl ChunkserverInternal {
         let (mut send, recv) = conn.open_bi().await?;
 
         loop {
-            let message = MetadataServerMessage::Heartbeat(HeartbeatPayload {
+            let message = MetadataServerInternalMessage::Heartbeat(HeartbeatPayload {
                 server_id: self.server_id,
                 active_client_connections: 1, // TODO: fetch those values in future
                 available_space_bytes: 64 * 1024 * 1024,

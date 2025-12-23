@@ -9,24 +9,13 @@ use storage_core::common::{
 };
 use tokio::{fs, join};
 
-impl Clone for ChunkserverExternal {
-    fn clone(&self) -> Self {
-        ChunkserverExternal {
-            chunks: self.chunks.clone(),
-            client_endpoint: self.client_endpoint.clone(),
-            internal_endpoint: self.internal_endpoint.clone(),
-            chunkserver_connections: self.chunkserver_connections.clone(),
-        }
-    }
-}
-
 impl ChunkserverExternal {
     pub(crate) fn new(
-        chunks: Arc<scc::HashMap<crate::external::chunkserver_definition::ChunkId, Chunk>>,
+        chunks: Arc<scc::HashMap<crate::external::definition::ChunkId, Chunk>>,
         client_endpoint: Arc<Endpoint>,
         internal_endpoint: Arc<Endpoint>,
         chunkserver_connections: Arc<
-            scc::HashMap<crate::external::chunkserver_definition::ServerId, Connection>,
+            scc::HashMap<crate::external::definition::ServerId, Connection>,
         >,
     ) -> Self {
         ChunkserverExternal {

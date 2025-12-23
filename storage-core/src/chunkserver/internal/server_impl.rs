@@ -1,4 +1,4 @@
-use crate::internal::chunkserver_definition::ChunkserverInternal;
+use crate::internal::definition::ChunkserverInternal;
 use async_trait::async_trait;
 use quinn::{Endpoint, RecvStream, SendStream};
 use storage_core::common::QuicServer;

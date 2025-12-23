@@ -13,11 +13,16 @@ pub trait Message: Serialize + DeserializeOwned {
 }
 
 #[derive(Debug, Serialize, Deserialize, Message)]
-pub enum MetadataServerMessage {
-    ChunkServerDiscover(ChunkServerDiscoverPayload),
-    Heartbeat(HeartbeatPayload),
+pub enum MetadataServerExternalMessage {
     ChunkPlacementRequest(ChunkPlacementRequestPayload),
     GetChunkPlacementRequest(GetChunkPlacementRequestPayload),
+    GetClientFolderStructureRequest(GetClientFolderStructureRequestPayload),
+}
+
+#[derive(Debug, Serialize, Deserialize, Message)]
+pub enum MetadataServerInternalMessage {
+    ChunkServerDiscover(ChunkServerDiscoverPayload),
+    Heartbeat(HeartbeatPayload),
 }
 
 #[derive(Debug, Serialize, Deserialize, Message)]
@@ -31,10 +36,12 @@ pub enum ChunkserverInternalMessage {
     AcceptNewChunkserver(AcceptNewChunkServerPayload),
 }
 
+// TODO probably not needed since it's client who initiates a connection
 #[derive(Debug, Serialize, Deserialize, Message)]
 pub enum ClientMessage {
     ChunkPlacementResponse(ChunkPlacementResponsePayload),
     GetChunkPlacementResponse(GetChunkPlacementResponsePayload),
     DownloadChunkResponse(DownloadChunkResponsePayload),
     RequestStatus(RequestStatusPayload),
+    GetClientFolderStructureResponse(GetClientFolderStructureResponsePayload),
 }

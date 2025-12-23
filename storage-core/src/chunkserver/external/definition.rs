@@ -8,7 +8,8 @@ pub(crate) type ServerId = Uuid;
 pub(crate) type RackId = String;
 pub(crate) type ChunkId = Uuid;
 
-/// 'ChunkserverExternal' is a struct that is used for communication with clients.
+/// 'ChunkserverExternal' is a struct used for communication with clients.
+#[derive(Clone)]
 pub struct ChunkserverExternal {
     pub(crate) chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
 

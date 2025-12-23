@@ -16,6 +16,7 @@ type RackId = String;
 /// # Tasks include:
 /// * sending stats to 'MetadataServer' via heartbeat
 /// * ensuring consistency of the states of all chunk's replicas across different 'Chunkservers'
+#[derive(Clone)]
 pub struct ChunkserverInternal {
     pub(crate) server_id: ServerId,
     pub(crate) rack_id: RackId,
