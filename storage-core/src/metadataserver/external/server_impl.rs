@@ -4,7 +4,9 @@ use quinn::{Endpoint, RecvStream, SendStream};
 use storage_core::common::MetadataServerExternalMessage::{
     ChunkPlacementRequest, GetChunkPlacementRequest, GetClientFolderStructureRequest,
 };
-use storage_core::common::{Message, MetadataServerExternalMessage, QuicServer};
+use storage_core::common::{
+    ClientMessage, Message, MetadataServerExternalMessage, QuicServer, RequestStatusPayload,
+};
 
 #[async_trait]
 impl QuicServer for MetadataServerExternal {
@@ -13,7 +15,7 @@ impl QuicServer for MetadataServerExternal {
     }
 
     async fn setup(&self) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 
     async fn handle_request(
@@ -21,13 +23,21 @@ impl QuicServer for MetadataServerExternal {
         mut send: SendStream,
         mut recv: RecvStream,
     ) -> anyhow::Result<()> {
-        match MetadataServerExternalMessage::recv(&mut recv).await? {
-            ChunkPlacementRequest(payload) => self.place_file(send, payload).await?,
-            GetChunkPlacementRequest(payload) => self.fetch_file_placement(send, payload).await?,
+        let res = match MetadataServerExternalMessage::recv(&mut recv).await? {
+            ChunkPlacementRequest(payload) => self.place_file(&mut send, payload).await,
+            GetChunkPlacementRequest(payload) => {
+                self.fetch_file_placement(&mut send, payload).await
+            }
             GetClientFolderStructureRequest(payload) => {
-                self.fetch_folder_structure(send, payload).await?
+                self.fetch_folder_structure(&mut send, payload).await
             }
         };
+
+        if res.is_err() {
+            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InternalServerError)
+                .send(&mut send)
+                .await;
+        }
 
         Ok(())
     }

@@ -31,7 +31,7 @@ impl MetadataServerExternal {
 
     pub(crate) async fn place_file(
         &self,
-        send: SendStream,
+        send: &mut SendStream,
         payload: ChunkPlacementRequestPayload,
     ) -> anyhow::Result<()> {
         todo!("unimplemented place_file")
@@ -39,7 +39,7 @@ impl MetadataServerExternal {
 
     pub(crate) async fn fetch_file_placement(
         &self,
-        mut send: SendStream,
+        send: &mut SendStream,
         payload: GetChunkPlacementRequestPayload,
     ) -> anyhow::Result<()> {
         todo!("unimplemented fetch_file_placement")
@@ -47,7 +47,7 @@ impl MetadataServerExternal {
 
     pub(crate) async fn fetch_folder_structure(
         &self,
-        mut send: SendStream,
+        send: &mut SendStream,
         payload: GetClientFolderStructureRequestPayload,
     ) -> anyhow::Result<()> {
         todo!("unimplemented fetch_folder_structure")

@@ -28,7 +28,7 @@ impl ChunkserverExternal {
 
     pub(crate) async fn handle_upload(
         &self,
-        mut send: SendStream,
+        send: &mut SendStream,
         payload: UploadChunkPayload,
     ) -> Result<()> {
         let chunk = Chunk {
@@ -45,7 +45,7 @@ impl ChunkserverExternal {
             // File was already uploaded
             let _ = join!(
                 fs::remove_file(&payload.data),
-                ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest).send(&mut send)
+                ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest).send(send)
             );
 
             return Ok(());
@@ -59,7 +59,7 @@ impl ChunkserverExternal {
         fs::rename(&payload.data, &chunk_final_path).await?;
 
         ClientMessage::RequestStatus(RequestStatusPayload::Ok)
-            .send(&mut send)
+            .send(send)
             .await?;
 
         Ok(())
@@ -67,7 +67,7 @@ impl ChunkserverExternal {
 
     pub(crate) async fn handle_download(
         &self,
-        mut send: SendStream,
+        send: &mut SendStream,
         payload: DownloadChunkRequestPayload,
     ) -> Result<()> {
         let chunk_size = self
@@ -78,7 +78,7 @@ impl ChunkserverExternal {
         let Some(chunk_size) = chunk_size else {
             // Chunk doesn't exist
             let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
-                .send(&mut send)
+                .send(send)
                 .await;
 
             return Ok(());
@@ -96,7 +96,7 @@ impl ChunkserverExternal {
             data: chunk_path,
         });
 
-        message.send(&mut send).await?;
+        message.send(send).await?;
 
         Ok(())
     }
