@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use quinn::{Endpoint, RecvStream, SendStream};
 use storage_core::common::MetadataServerExternalMessage::{
     ChunkPlacementRequest, GetChunkPlacementRequest, GetClientFolderStructureRequest,
+    UpdateClientFolderStructure,
 };
 use storage_core::common::{
     ClientMessage, Message, MetadataServerExternalMessage, QuicServer, RequestStatusPayload,
@@ -30,6 +31,9 @@ impl QuicServer for MetadataServerExternal {
             }
             GetClientFolderStructureRequest(payload) => {
                 self.fetch_folder_structure(&mut send, payload).await
+            }
+            UpdateClientFolderStructure(payload) => {
+                self.update_folder_structure(&mut send, payload).await
             }
         };
 

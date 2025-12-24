@@ -1,15 +1,21 @@
 use crate::external::MetadataServerExternal;
-use crate::placement_strategy::RandomPlacementStrategy;
+use crate::placement_strategy::{PlacementStrategy, RandomPlacementStrategy};
 use crate::types::{
     ActiveChunkserver, ChunkId, ChunkMetadata, ChunkserverId, FailedChunkserver, FileId,
     FileMetadata,
 };
-use quinn::{Endpoint, SendStream};
+use futures::future;
+use futures::future::try_join_all;
+use futures::stream::{self, StreamExt, TryStreamExt};
+use quinn::{Chunk, Endpoint, SendStream};
 use std::sync::Arc;
+use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_SPAWNED_TASKS, N_CHUNK_REPLICAS};
 use storage_core::common::{
-    ChunkPlacementRequestPayload, GetChunkPlacementRequestPayload,
-    GetClientFolderStructureRequestPayload,
+    ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkserverLocation,
+    ClientMessage, GetChunkPlacementRequestPayload, GetClientFolderStructureRequestPayload,
+    Message, RequestStatusPayload, UpdateClientFolderStructurePayload,
 };
+use uuid::Uuid;
 
 impl MetadataServerExternal {
     pub(crate) fn new(
@@ -34,7 +40,109 @@ impl MetadataServerExternal {
         send: &mut SendStream,
         payload: ChunkPlacementRequestPayload,
     ) -> anyhow::Result<()> {
-        todo!("unimplemented place_file")
+        let n_chunks = payload.file_size.div_ceil(MAX_CHUNK_SIZE);
+        let chunk_ids: Vec<_> = (0..n_chunks).map(|_| Uuid::new_v4()).collect();
+
+        if self
+            .files
+            .insert_async(
+                payload.filename,
+                FileMetadata {
+                    chunks: chunk_ids.clone(),
+                },
+            )
+            .await
+            .is_err()
+        {
+            // Prevent from creating the same file again (TODO: for given user).
+
+            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
+                .send(send)
+                .await;
+            return Ok(());
+        }
+
+        let selected_servers_ids = self
+            .placement_strategy
+            .select_servers(n_chunks, self.active_chunkservers.clone());
+
+        let chunk_server_matchings: Vec<_> = chunk_ids
+            .iter()
+            .copied()
+            .zip(selected_servers_ids)
+            .collect();
+
+        for (chunk_id, (primary, secondaries)) in &chunk_server_matchings {
+            let _ = self
+                .chunks
+                .insert_async(
+                    *chunk_id,
+                    ChunkMetadata {
+                        chunk_id: *chunk_id,
+                        primary: primary.clone(),
+                        replicas: secondaries.clone(),
+                    },
+                )
+                .await;
+        }
+
+        let active_chunkservers = self.active_chunkservers.clone();
+        let to_location = move |s_id: ChunkserverId| {
+            let active_chunkservers = active_chunkservers.clone();
+
+            async move {
+                active_chunkservers
+                    .get_async(&s_id)
+                    .await
+                    .map(|server_entry| ChunkserverLocation {
+                        chunk_id: s_id,
+                        server_location: server_entry.get().external_address,
+                        server_hostname: server_entry.get().hostname.clone(),
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("Chunkserver {:?} not found", s_id))
+            }
+        };
+
+        let to_location_for_batch = to_location.clone();
+        let to_locations = move |s_ids: [ChunkserverId; N_CHUNK_REPLICAS]| {
+            let to_location = to_location_for_batch.clone();
+
+            async move {
+                try_join_all(s_ids.iter().map(|&id| to_location(id)))
+                    .await?
+                    .try_into()
+                    .map_err(|_| {
+                        anyhow::anyhow!(
+                            "Each chunk should be assigned N_CHUNK_REPLICAS secondaries"
+                        )
+                    })
+            }
+        };
+
+        let selected_chunkservers = stream::iter(chunk_server_matchings)
+            .map(|(chunk_id, (primary, secondaries))| {
+                let to_location = to_location.clone();
+                let to_locations = to_locations.clone();
+
+                async move {
+                    Ok::<_, anyhow::Error>((
+                        chunk_id,
+                        to_location(primary).await?,
+                        to_locations(secondaries).await?,
+                    ))
+                }
+            })
+            .buffer_unordered(MAX_SPAWNED_TASKS)
+            .try_collect()
+            .await?;
+
+        ClientMessage::ChunkPlacementResponse(ChunkPlacementResponsePayload {
+            selected_chunkservers,
+        })
+        .send(send)
+        .await?;
+
+        Ok(())
     }
 
     pub(crate) async fn fetch_file_placement(
@@ -51,5 +159,13 @@ impl MetadataServerExternal {
         payload: GetClientFolderStructureRequestPayload,
     ) -> anyhow::Result<()> {
         todo!("unimplemented fetch_folder_structure")
+    }
+
+    pub(crate) async fn update_folder_structure(
+        &self,
+        send: &mut SendStream,
+        payload: UpdateClientFolderStructurePayload,
+    ) -> anyhow::Result<()> {
+        todo!("unimplemented update_folder_structure")
     }
 }

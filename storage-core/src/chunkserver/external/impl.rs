@@ -3,9 +3,10 @@ use crate::external::ChunkserverExternal;
 use anyhow::Result;
 use quinn::{Connection, Endpoint, SendStream};
 use std::sync::Arc;
+use storage_core::common::config::FINAL_STORAGE_ROOT;
 use storage_core::common::{
-    ClientMessage, DownloadChunkRequestPayload, DownloadChunkResponsePayload, FINAL_STORAGE_ROOT,
-    Message, RequestStatusPayload, UploadChunkPayload,
+    ClientMessage, DownloadChunkRequestPayload, DownloadChunkResponsePayload, Message,
+    RequestStatusPayload, UploadChunkPayload,
 };
 use tokio::{fs, join};
 

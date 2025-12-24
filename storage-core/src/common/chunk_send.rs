@@ -68,11 +68,11 @@ impl SendChunkMetadata {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChunkserverLocation {
-    chunk_id: ChunkId,
-    server_location: ServerLocation,
-    server_hostname: Hostname,
+    pub chunk_id: ChunkId,
+    pub server_location: ServerLocation,
+    pub server_hostname: Hostname,
 }
 
 impl ChunkserverLocation {

@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use storage_core::common::config::N_CHUNK_REPLICAS;
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -9,14 +10,14 @@ pub(crate) type RackId = String;
 pub(crate) type Hostname = String;
 
 pub(crate) struct FileMetadata {
-    chunks: Vec<ChunkId>,
+    pub(crate) chunks: Vec<ChunkId>,
 }
 
 pub(crate) struct ChunkMetadata {
-    chunk_id: ChunkId,
+    pub(crate) chunk_id: ChunkId,
 
-    primary: ChunkserverId,
-    replicas: Vec<ChunkserverId>,
+    pub(crate) primary: ChunkserverId,
+    pub(crate) replicas: [ChunkserverId; N_CHUNK_REPLICAS],
 }
 
 pub(crate) struct ActiveChunkserver {

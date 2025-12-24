@@ -19,21 +19,12 @@ pub fn derive_chunk_payload(input: TokenStream) -> TokenStream {
                     tokio::io::AsyncSeekExt::seek(&mut file, std::io::SeekFrom::Start(self.offset)).await?;
                 }
 
-                let mut buf = vec![0u8; 64 * 1024]; // 64kB
-                let mut sent = 0u64;
+                let mut file = file.take(self.chunk_size);
 
-                while sent < self.chunk_size {
-                    let remaining = self.chunk_size - sent;
-                    let to_read = std::cmp::min(buf.len() as u64, remaining) as usize;
+                let bytes_sent = tokio::io::copy(&mut file, send).await?;
 
-                    let n = file.read(&mut buf[0..to_read]).await?;
-                    if n == 0 {
-                        anyhow::bail!("Chunk read to few bytes");
-                    }
-
-                    send.write_all(&buf[0..n]).await?;
-
-                    sent += n as u64;
+                if bytes_sent < self.chunk_size {
+                    anyhow::bail!("Chunk read to few bytes");
                 }
 
                 Ok(())
@@ -55,7 +46,7 @@ pub fn derive_chunk_payload(input: TokenStream) -> TokenStream {
 
                 let file = tokio::fs::File::create(&payload.data).await?;
                 file.set_len(data_len).await?;
-                let mut writer = tokio::io::BufWriter::with_capacity(64 * 1024, file); // 64 kB
+                let mut writer = tokio::io::BufWriter::with_capacity(payload.chunk_size as usize, file);
                 let mut limited_recv = recv.take(data_len);
                 tokio::io::copy(&mut limited_recv, &mut writer).await?;
                 writer.flush().await?;

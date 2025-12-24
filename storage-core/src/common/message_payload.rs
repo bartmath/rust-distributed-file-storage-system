@@ -1,19 +1,17 @@
-use crate::common::chunk_send::ChunkserverLocation;
+use crate::common::config::N_CHUNK_REPLICAS;
+use crate::common::config::TMP_STORAGE_ROOT;
+use crate::common::types::{PrimaryLocation, SecondaryLocation};
 use anyhow::Result;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::OnceLock;
 use storage_macros::ChunkPayload;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 type ChunkId = Uuid;
 type RackId = String;
-
-pub static TMP_STORAGE_ROOT: OnceLock<PathBuf> = OnceLock::new();
-pub static FINAL_STORAGE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
 pub(crate) trait MessagePayload: Serialize + DeserializeOwned {
     async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
@@ -73,7 +71,11 @@ pub struct ChunkPlacementRequestPayload {
 /// Contains list of Chunkservers (with their addresses) where the chunks have to be stored.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChunkPlacementResponsePayload {
-    pub selected_chunkservers: Vec<ChunkserverLocation>,
+    pub selected_chunkservers: Vec<(
+        ChunkId,
+        PrimaryLocation,
+        [SecondaryLocation; N_CHUNK_REPLICAS],
+    )>,
 }
 
 /// Sent from Client to Chunkserver.
@@ -139,7 +141,7 @@ pub struct GetClientFolderStructureResponsePayload {}
 /// Sent at the end of the client session (and once every some interval e.g. 10mins)
 /// to MetadataServer with any updates to client's folder structure.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SendClientFolderStructurePayload {}
+pub struct UpdateClientFolderStructurePayload {}
 
 impl MessagePayload for AcceptNewChunkServerPayload {}
 impl MessagePayload for ChunkServerDiscoverPayload {}
@@ -152,4 +154,4 @@ impl MessagePayload for DownloadChunkRequestPayload {}
 impl MessagePayload for RequestStatusPayload {}
 impl MessagePayload for GetClientFolderStructureRequestPayload {}
 impl MessagePayload for GetClientFolderStructureResponsePayload {}
-impl MessagePayload for SendClientFolderStructurePayload {}
+impl MessagePayload for UpdateClientFolderStructurePayload {}

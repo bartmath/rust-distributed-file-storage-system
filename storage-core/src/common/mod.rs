@@ -1,8 +1,9 @@
 mod chunk_send;
+pub mod config;
 pub mod message_payload;
 mod messages;
 mod server;
-mod types;
+pub mod types;
 
 pub use chunk_send::ChunkserverLocation;
 pub use message_payload::*;

@@ -17,6 +17,7 @@ pub enum MetadataServerExternalMessage {
     ChunkPlacementRequest(ChunkPlacementRequestPayload),
     GetChunkPlacementRequest(GetChunkPlacementRequestPayload),
     GetClientFolderStructureRequest(GetClientFolderStructureRequestPayload),
+    UpdateClientFolderStructure(UpdateClientFolderStructurePayload),
 }
 
 #[derive(Debug, Serialize, Deserialize, Message)]
