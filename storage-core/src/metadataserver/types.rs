@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::net::SocketAddr;
 use storage_core::common::config::N_CHUNK_REPLICAS;
 use tokio::time::Instant;
@@ -13,6 +14,7 @@ pub(crate) struct FileMetadata {
     pub(crate) chunks: Vec<ChunkId>,
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct ChunkMetadata {
     pub(crate) chunk_id: ChunkId,
 

@@ -2,7 +2,7 @@ use crate::external::MetadataServerExternal;
 use async_trait::async_trait;
 use quinn::{Endpoint, RecvStream, SendStream};
 use storage_core::common::MetadataServerExternalMessage::{
-    ChunkPlacementRequest, GetChunkPlacementRequest, GetClientFolderStructureRequest,
+    ChunkPlacementRequest, GetClientFolderStructureRequest, GetFilePlacementRequest,
     UpdateClientFolderStructure,
 };
 use storage_core::common::{
@@ -26,9 +26,7 @@ impl QuicServer for MetadataServerExternal {
     ) -> anyhow::Result<()> {
         let res = match MetadataServerExternalMessage::recv(&mut recv).await? {
             ChunkPlacementRequest(payload) => self.place_file(&mut send, payload).await,
-            GetChunkPlacementRequest(payload) => {
-                self.fetch_file_placement(&mut send, payload).await
-            }
+            GetFilePlacementRequest(payload) => self.fetch_file_placement(&mut send, payload).await,
             GetClientFolderStructureRequest(payload) => {
                 self.fetch_folder_structure(&mut send, payload).await
             }

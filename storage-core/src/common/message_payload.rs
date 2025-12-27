@@ -1,6 +1,6 @@
 use crate::common::config::N_CHUNK_REPLICAS;
 use crate::common::config::TMP_STORAGE_ROOT;
-use crate::common::types::{PrimaryLocation, SecondaryLocation};
+use crate::common::types::ChunkLocations;
 use anyhow::Result;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
@@ -71,11 +71,7 @@ pub struct ChunkPlacementRequestPayload {
 /// Contains list of Chunkservers (with their addresses) where the chunks have to be stored.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChunkPlacementResponsePayload {
-    pub selected_chunkservers: Vec<(
-        ChunkId,
-        PrimaryLocation,
-        [SecondaryLocation; N_CHUNK_REPLICAS],
-    )>,
+    pub selected_chunkservers: Vec<ChunkLocations>,
 }
 
 /// Sent from Client to Chunkserver.
@@ -94,12 +90,16 @@ pub struct UploadChunkPayload {
 /// Sent from Client to MetadataServer.
 /// Contains the file id, which Client wants to download.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GetChunkPlacementRequestPayload {}
+pub struct GetFilePlacementRequestPayload {
+    pub filename: String,
+}
 
 /// Sent from MetadataServer to Client as a response to DownloadChunkserversRequestPayload.
 /// Contains list of Chunkservers (with their addresses) which store file's chunks.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GetChunkPlacementResponsePayload {}
+pub struct GetFilePlacementResponsePayload {
+    pub chunks_locations: Vec<ChunkLocations>,
+}
 
 /// Sent from Client to ChunkServer.
 /// Contains list of chunk ids which it wants to download from the ChunkServer.
@@ -147,9 +147,9 @@ impl MessagePayload for AcceptNewChunkServerPayload {}
 impl MessagePayload for ChunkServerDiscoverPayload {}
 impl MessagePayload for HeartbeatPayload {}
 impl MessagePayload for ChunkPlacementRequestPayload {}
-impl MessagePayload for GetChunkPlacementRequestPayload {}
+impl MessagePayload for GetFilePlacementRequestPayload {}
 impl MessagePayload for ChunkPlacementResponsePayload {}
-impl MessagePayload for GetChunkPlacementResponsePayload {}
+impl MessagePayload for GetFilePlacementResponsePayload {}
 impl MessagePayload for DownloadChunkRequestPayload {}
 impl MessagePayload for RequestStatusPayload {}
 impl MessagePayload for GetClientFolderStructureRequestPayload {}

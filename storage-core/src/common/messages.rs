@@ -15,7 +15,7 @@ pub trait Message: Serialize + DeserializeOwned {
 #[derive(Debug, Serialize, Deserialize, Message)]
 pub enum MetadataServerExternalMessage {
     ChunkPlacementRequest(ChunkPlacementRequestPayload),
-    GetChunkPlacementRequest(GetChunkPlacementRequestPayload),
+    GetFilePlacementRequest(GetFilePlacementRequestPayload),
     GetClientFolderStructureRequest(GetClientFolderStructureRequestPayload),
     UpdateClientFolderStructure(UpdateClientFolderStructurePayload),
 }
@@ -41,7 +41,7 @@ pub enum ChunkserverInternalMessage {
 #[derive(Debug, Serialize, Deserialize, Message)]
 pub enum ClientMessage {
     ChunkPlacementResponse(ChunkPlacementResponsePayload),
-    GetChunkPlacementResponse(GetChunkPlacementResponsePayload),
+    GetFilePlacementResponse(GetFilePlacementResponsePayload),
     DownloadChunkResponse(DownloadChunkResponsePayload),
     RequestStatus(RequestStatusPayload),
     GetClientFolderStructureResponse(GetClientFolderStructureResponsePayload),

@@ -10,10 +10,12 @@ use futures::stream::{self, StreamExt, TryStreamExt};
 use quinn::{Chunk, Endpoint, SendStream};
 use std::sync::Arc;
 use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_SPAWNED_TASKS, N_CHUNK_REPLICAS};
+use storage_core::common::types::ChunkLocations;
 use storage_core::common::{
     ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkserverLocation,
-    ClientMessage, GetChunkPlacementRequestPayload, GetClientFolderStructureRequestPayload,
-    Message, RequestStatusPayload, UpdateClientFolderStructurePayload,
+    ClientMessage, GetClientFolderStructureRequestPayload, GetFilePlacementRequestPayload,
+    GetFilePlacementResponsePayload, Message, RequestStatusPayload,
+    UpdateClientFolderStructurePayload,
 };
 use uuid::Uuid;
 
@@ -33,6 +35,45 @@ impl MetadataServerExternal {
             files,
             chunks,
         }
+    }
+
+    async fn resolve_chunk_locations(
+        active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
+        chunk_id: ChunkId,
+        primary: ChunkserverId,
+        replicas: [ChunkserverId; N_CHUNK_REPLICAS],
+    ) -> anyhow::Result<ChunkLocations> {
+        let to_location = move |s_id: ChunkserverId| {
+            let active_chunkservers = active_chunkservers.clone();
+
+            async move {
+                active_chunkservers
+                    .get_async(&s_id)
+                    .await
+                    .map(|server_entry| ChunkserverLocation {
+                        chunk_id: s_id,
+                        server_location: server_entry.get().external_address,
+                        server_hostname: server_entry.get().hostname.clone(),
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("Chunkserver {:?} not found", s_id))
+            }
+        };
+
+        let to_location_for_batch = to_location.clone();
+        let to_locations = move |s_ids: [ChunkserverId; N_CHUNK_REPLICAS]| async move {
+            try_join_all(s_ids.iter().map(|&id| to_location_for_batch(id)))
+                .await?
+                .try_into()
+                .map_err(|_| {
+                    anyhow::anyhow!("Each chunk should be assigned N_CHUNK_REPLICAS secondaries")
+                })
+        };
+
+        Ok(ChunkLocations {
+            chunk_id,
+            primary: to_location(primary).await?,
+            secondaries: to_locations(replicas).await?,
+        })
     }
 
     pub(crate) async fn place_file(
@@ -87,50 +128,14 @@ impl MetadataServerExternal {
         }
 
         let active_chunkservers = self.active_chunkservers.clone();
-        let to_location = move |s_id: ChunkserverId| {
-            let active_chunkservers = active_chunkservers.clone();
-
-            async move {
-                active_chunkservers
-                    .get_async(&s_id)
-                    .await
-                    .map(|server_entry| ChunkserverLocation {
-                        chunk_id: s_id,
-                        server_location: server_entry.get().external_address,
-                        server_hostname: server_entry.get().hostname.clone(),
-                    })
-                    .ok_or_else(|| anyhow::anyhow!("Chunkserver {:?} not found", s_id))
-            }
-        };
-
-        let to_location_for_batch = to_location.clone();
-        let to_locations = move |s_ids: [ChunkserverId; N_CHUNK_REPLICAS]| {
-            let to_location = to_location_for_batch.clone();
-
-            async move {
-                try_join_all(s_ids.iter().map(|&id| to_location(id)))
-                    .await?
-                    .try_into()
-                    .map_err(|_| {
-                        anyhow::anyhow!(
-                            "Each chunk should be assigned N_CHUNK_REPLICAS secondaries"
-                        )
-                    })
-            }
-        };
-
         let selected_chunkservers = stream::iter(chunk_server_matchings)
             .map(|(chunk_id, (primary, secondaries))| {
-                let to_location = to_location.clone();
-                let to_locations = to_locations.clone();
-
-                async move {
-                    Ok::<_, anyhow::Error>((
-                        chunk_id,
-                        to_location(primary).await?,
-                        to_locations(secondaries).await?,
-                    ))
-                }
+                Self::resolve_chunk_locations(
+                    active_chunkservers.clone(),
+                    chunk_id,
+                    primary,
+                    secondaries,
+                )
             })
             .buffer_unordered(MAX_SPAWNED_TASKS)
             .try_collect()
@@ -148,9 +153,54 @@ impl MetadataServerExternal {
     pub(crate) async fn fetch_file_placement(
         &self,
         send: &mut SendStream,
-        payload: GetChunkPlacementRequestPayload,
+        payload: GetFilePlacementRequestPayload,
     ) -> anyhow::Result<()> {
-        todo!("unimplemented fetch_file_placement")
+        let Some(file_chunks_ids) = self
+            .files
+            .read_async(&payload.filename, |_, file| file.chunks.clone())
+            .await
+        else {
+            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
+                .send(send)
+                .await;
+            return Ok(());
+        };
+
+        let active_chunkservers_handle = self.active_chunkservers.clone();
+        let chunks_handle = self.chunks.clone();
+        let chunks_locations = stream::iter(file_chunks_ids)
+            .map(move |chunk_id| {
+                let chunks = chunks_handle.clone();
+                let active_chunkservers = active_chunkservers_handle.clone();
+
+                async move {
+                    let chunk = chunks
+                        .read_async(&chunk_id, |_, chunk| chunk.clone())
+                        .await
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("Chunk {} missing from metadata", chunk_id)
+                        })?;
+
+                    Self::resolve_chunk_locations(
+                        active_chunkservers,
+                        chunk_id,
+                        chunk.primary,
+                        chunk.replicas,
+                    )
+                    .await
+                }
+            })
+            .buffer_unordered(MAX_SPAWNED_TASKS)
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        ClientMessage::GetFilePlacementResponse(GetFilePlacementResponsePayload {
+            chunks_locations,
+        })
+        .send(send)
+        .await?;
+
+        Ok(())
     }
 
     pub(crate) async fn fetch_folder_structure(
