@@ -16,5 +16,5 @@ pub type SecondaryLocation = ChunkserverLocation;
 pub struct ChunkLocations {
     pub chunk_id: ChunkId,
     pub primary: PrimaryLocation,
-    pub secondaries: [SecondaryLocation; N_CHUNK_REPLICAS],
+    pub secondaries: [SecondaryLocation; N_CHUNK_REPLICAS], // TODO: change from returning a struct to having a Vec to account for possible failures
 }

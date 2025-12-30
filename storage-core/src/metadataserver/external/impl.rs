@@ -105,7 +105,8 @@ impl MetadataServerExternal {
 
         let selected_servers_ids = self
             .placement_strategy
-            .select_servers(n_chunks, self.active_chunkservers.clone());
+            .select_servers(n_chunks, self.active_chunkservers.clone())
+            .await;
 
         let chunk_server_matchings: Vec<_> = chunk_ids
             .iter()

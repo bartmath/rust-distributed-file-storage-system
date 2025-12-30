@@ -1,4 +1,7 @@
 use crate::types::{ActiveChunkserver, ChunkserverId};
+use async_trait::async_trait;
+use rand::rng;
+use rand::seq::IndexedRandom;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use storage_core::common::config::N_CHUNK_REPLICAS;
@@ -15,8 +18,9 @@ type SecondaryServerId = ChunkserverId;
 ///
 /// # Returns
 /// A vector of length 'n_chunks' of ids of primary and secondary servers for each chunk.
+#[async_trait]
 pub(crate) trait PlacementStrategy {
-    fn select_servers(
+    async fn select_servers(
         &self,
         n_chunks: usize,
         active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
@@ -26,12 +30,41 @@ pub(crate) trait PlacementStrategy {
 #[derive(Debug, Clone)]
 pub(crate) struct RandomPlacementStrategy {}
 
+#[async_trait]
 impl PlacementStrategy for RandomPlacementStrategy {
-    fn select_servers(
+    async fn select_servers(
         &self,
         n_chunks: usize,
         available_servers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
     ) -> Vec<(PrimaryServerId, [SecondaryServerId; N_CHUNK_REPLICAS])> {
-        todo!("implement the strategy")
+        let mut candidates = Vec::new();
+        available_servers
+            .iter_async(|k, _| {
+                candidates.push(k.clone());
+                true
+            })
+            .await;
+
+        if candidates.len() < N_CHUNK_REPLICAS + 1 {
+            return Vec::new();
+        }
+
+        let mut rng = rng();
+
+        (0..n_chunks)
+            .map(|_| {
+                let mut selected: Vec<_> = candidates
+                    .choose_multiple(&mut rng, N_CHUNK_REPLICAS + 1)
+                    .copied()
+                    .collect();
+
+                // Already considered the case where too few servers were generated.
+                let primary = selected.remove(0);
+                let secondaries: [SecondaryServerId; N_CHUNK_REPLICAS] =
+                    selected.try_into().unwrap();
+
+                (primary, secondaries)
+            })
+            .collect()
     }
 }
