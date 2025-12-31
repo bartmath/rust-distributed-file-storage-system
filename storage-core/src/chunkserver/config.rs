@@ -16,25 +16,19 @@ pub(crate) struct ChunkserverOpt {
     /// TLS certificate in PEM format
     #[clap(short = 'c', long = "cert", requires = "key")]
     pub(crate) cert: Option<PathBuf>,
-    /// Enable stateless retries
-    #[clap(long = "stateless-retry")]
-    pub(crate) stateless_retry: bool,
     /// Address to listen on for connection from clients.
-    #[clap(long = "client socket address", default_value = "[::]:12345")]
+    #[clap(long = "client-socket-addr", default_value = "[::]:12345")]
     pub(crate) client_socket_addr: SocketAddr,
     /// Address to listen on for connection from internal servers.
-    #[clap(long = "internal socket address", default_value = "[::]:12346")]
+    #[clap(long = "internal-socket-addr", default_value = "[::]:12346")]
     pub(crate) internal_socket_addr: SocketAddr,
     /// Metadata server hostname.
-    #[clap(long = "metadata server hostname")]
+    #[clap(long = "metadata-server-hostname")]
     pub(crate) metadata_server_hostname: String,
     /// Metadata server address for internal communication.
-    #[clap(long = "metadata server address", default_value = "[::1]:4433")]
+    #[clap(long = "metadata-server-addr", default_value = "[::1]:4433")]
     pub(crate) metadata_server_addr: SocketAddr,
     /// Unique identification of the rack the chunkserver is placed in.
-    #[clap(long = "id of rack the server is placed in")]
+    #[clap(long = "rack-id")]
     pub(crate) rack_id: String,
-    /// Maximum number of concurrent connections to allow
-    #[clap(long = "connection-limit")]
-    pub(crate) connection_limit: Option<usize>,
 }

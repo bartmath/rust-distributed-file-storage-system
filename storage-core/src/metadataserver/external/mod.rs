@@ -1,5 +1,5 @@
 mod definition;
-mod r#impl;
+mod placement_strategy;
 mod server_impl;
 
 pub use definition::MetadataServerExternal;

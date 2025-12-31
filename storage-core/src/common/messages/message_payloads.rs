@@ -1,34 +1,40 @@
-use crate::common::config::N_CHUNK_REPLICAS;
-use crate::common::config::TMP_STORAGE_ROOT;
+use crate::common::messages::chunk_transfer::ChunkTransfer;
+use crate::common::messages::payload::MessagePayload;
 use crate::common::types::ChunkLocations;
-use anyhow::Result;
 use quinn::{RecvStream, SendStream};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use storage_macros::ChunkPayload;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 type ChunkId = Uuid;
 type RackId = String;
 
-pub(crate) trait MessagePayload: Serialize + DeserializeOwned {
-    async fn send_payload(&self, send: &mut SendStream) -> Result<()> {
-        let bytes = bincode::serialize(&self)?;
-        send.write_u32(bytes.len() as u32).await?;
-        send.write_all(&bytes).await?;
-        Ok(())
-    }
+macro_rules! impl_chunk_payload {
+    ($type:ty) => {
+        impl MessagePayload for $type {
+            async fn send_payload(&self, send: &mut SendStream) -> anyhow::Result<()> {
+                let metadata_bytes = bincode::serialize(&self)?;
+                send.write_u32(metadata_bytes.len() as u32).await?;
+                send.write_all(&metadata_bytes).await?;
 
-    async fn recv_payload(recv: &mut RecvStream) -> Result<Self> {
-        let len = recv.read_u32().await?;
-        let mut buffer = vec![0; len as usize];
-        recv.read_exact(&mut buffer).await?;
-        let payload: Self = bincode::deserialize(&buffer)?;
+                self.chunk_transfer.send_chunk(self.chunk_size, send).await
+            }
 
-        Ok(payload)
-    }
+            async fn recv_payload(recv: &mut RecvStream) -> anyhow::Result<Self> {
+                let len = recv.read_u32().await?;
+
+                let mut buffer = vec![0u8; len as usize];
+                recv.read_exact(&mut buffer).await?;
+                let mut payload: Self = bincode::deserialize(&buffer)?;
+
+                let chunk_transfer =
+                    ChunkTransfer::recv_chunk(payload.chunk_id, payload.chunk_size, recv).await?;
+                payload.chunk_transfer = chunk_transfer;
+
+                Ok(payload)
+            }
+        }
+    };
 }
 
 /// Sent by Chunkserver to MetadataServer as first message (or after reconnection with the MetadataServer).
@@ -40,6 +46,7 @@ pub struct ChunkServerDiscoverPayload {
     pub rack_id: RackId,
     pub stored_chunks: Vec<ChunkId>, // we will probably need to send also some other info about the chunk, not only the id
 }
+impl MessagePayload for ChunkServerDiscoverPayload {}
 
 /// Sent from MetadataServer to Chunkserver as a response to ChunkServerDiscoverPayload.
 /// Contains new id of the Chunkserver which has been assigned by MetadataServer.
@@ -47,6 +54,7 @@ pub struct ChunkServerDiscoverPayload {
 pub struct AcceptNewChunkServerPayload {
     pub chunkserver_new_id: Uuid,
 }
+impl MessagePayload for AcceptNewChunkServerPayload {}
 
 /// Sent regularly by ChunkServer to MetadataServer.
 /// Contains all data and statistics required by MetadataServer
@@ -57,6 +65,7 @@ pub struct HeartbeatPayload {
     pub active_client_connections: u32,
     pub available_space_bytes: u64,
 }
+impl MessagePayload for HeartbeatPayload {}
 
 /// Sent by Client to MetadataServer.
 /// Sends some data about the file to upload so that MetadataServer may decide
@@ -66,6 +75,7 @@ pub struct ChunkPlacementRequestPayload {
     pub filename: String,
     pub file_size: usize,
 }
+impl MessagePayload for ChunkPlacementRequestPayload {}
 
 /// Sent by MetadataServer to Client as a response to UploadChunkServersRequestPayload.
 /// Contains list of Chunkservers (with their addresses) where the chunks have to be stored.
@@ -73,19 +83,18 @@ pub struct ChunkPlacementRequestPayload {
 pub struct ChunkPlacementResponsePayload {
     pub selected_chunkservers: Vec<ChunkLocations>,
 }
+impl MessagePayload for ChunkPlacementResponsePayload {}
 
 /// Sent from Client to Chunkserver.
-/// Contains a Chunks to be stored on the Chunkserver.
-#[derive(Serialize, Deserialize, Debug, ChunkPayload)]
+/// Contains a Chunk to be stored on the Chunkserver.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UploadChunkPayload {
     pub chunk_id: ChunkId,
     pub chunk_size: u64,
-    // pub checksum: [u8; 32],
     #[serde(skip)]
-    pub offset: u64, // helper for reconstructing the file
-    #[serde(skip)]
-    pub data: PathBuf,
+    pub chunk_transfer: ChunkTransfer,
 }
+impl_chunk_payload!(UploadChunkPayload);
 
 /// Sent from Client to MetadataServer.
 /// Contains the file id, which Client wants to download.
@@ -93,6 +102,7 @@ pub struct UploadChunkPayload {
 pub struct GetFilePlacementRequestPayload {
     pub filename: String,
 }
+impl MessagePayload for GetFilePlacementRequestPayload {}
 
 /// Sent from MetadataServer to Client as a response to DownloadChunkserversRequestPayload.
 /// Contains list of Chunkservers (with their addresses) which store file's chunks.
@@ -100,6 +110,7 @@ pub struct GetFilePlacementRequestPayload {
 pub struct GetFilePlacementResponsePayload {
     pub chunks_locations: Vec<ChunkLocations>,
 }
+impl MessagePayload for GetFilePlacementResponsePayload {}
 
 /// Sent from Client to ChunkServer.
 /// Contains list of chunk ids which it wants to download from the ChunkServer.
@@ -107,18 +118,18 @@ pub struct GetFilePlacementResponsePayload {
 pub struct DownloadChunkRequestPayload {
     pub chunk_id: ChunkId,
 }
+impl MessagePayload for DownloadChunkRequestPayload {}
 
 /// Sent from Chunkserver to Client as a response to GetChunksRequestPayload.
 /// Contains chunk which have been requested by Client.
-#[derive(Serialize, Deserialize, Debug, ChunkPayload)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct DownloadChunkResponsePayload {
     pub chunk_id: ChunkId,
     pub chunk_size: u64,
     #[serde(skip)]
-    pub offset: u64, // helper for reconstructing the file
-    #[serde(skip)]
-    pub data: PathBuf,
+    pub chunk_transfer: ChunkTransfer,
 }
+impl_chunk_payload!(DownloadChunkResponsePayload);
 
 /// Sent from any server to a client when no other response would be sent.
 #[derive(Serialize, Deserialize, Debug)]
@@ -127,31 +138,22 @@ pub enum RequestStatusPayload {
     InvalidRequest,
     InternalServerError,
 }
+impl MessagePayload for RequestStatusPayload {}
 
 /// Sent (with/once after logging) from client to MetadataServer
 /// (for now, we could offload it to a separate server)
 /// to get client's folder structure.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetClientFolderStructureRequestPayload {}
+impl MessagePayload for GetClientFolderStructureRequestPayload {}
 
 /// Sent from MetadataServer to Client as a response to GetClientFolderStructureRequestPayload.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetClientFolderStructureResponsePayload {}
+impl MessagePayload for GetClientFolderStructureResponsePayload {}
 
 /// Sent at the end of the client session (and once every some interval e.g. 10mins)
 /// to MetadataServer with any updates to client's folder structure.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateClientFolderStructurePayload {}
-
-impl MessagePayload for AcceptNewChunkServerPayload {}
-impl MessagePayload for ChunkServerDiscoverPayload {}
-impl MessagePayload for HeartbeatPayload {}
-impl MessagePayload for ChunkPlacementRequestPayload {}
-impl MessagePayload for GetFilePlacementRequestPayload {}
-impl MessagePayload for ChunkPlacementResponsePayload {}
-impl MessagePayload for GetFilePlacementResponsePayload {}
-impl MessagePayload for DownloadChunkRequestPayload {}
-impl MessagePayload for RequestStatusPayload {}
-impl MessagePayload for GetClientFolderStructureRequestPayload {}
-impl MessagePayload for GetClientFolderStructureResponsePayload {}
 impl MessagePayload for UpdateClientFolderStructurePayload {}

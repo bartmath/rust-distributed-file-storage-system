@@ -3,6 +3,7 @@ mod config;
 mod external;
 mod internal;
 mod setup;
+mod types;
 
 use crate::external::ChunkserverExternal;
 use crate::internal::ChunkserverInternal;
