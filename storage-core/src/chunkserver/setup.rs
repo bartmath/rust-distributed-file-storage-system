@@ -7,6 +7,7 @@ use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use rustls::pki_types::CertificateDer;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use storage_core::common;
 
 pub(crate) fn chunkserver_setup(
@@ -68,11 +69,16 @@ pub(crate) fn chunkserver_setup(
     let internal_endpoint = Arc::new(internal_endpoint);
     let clients_endpoint = Arc::new(clients_endpoint);
 
+    let requests_since_heartbeat = Arc::new(AtomicU64::new(0));
     let chunks = Arc::new(scc::HashMap::new());
     let chunkserver_connections = Arc::new(scc::HashMap::new());
 
     let internal_chunkserver = ChunkserverInternal::new(
+        options.chunkserver_hostname,
         options.rack_id,
+        options.advertised_internal_addr,
+        options.advertised_external_addr,
+        requests_since_heartbeat.clone(),
         chunks.clone(),
         internal_endpoint.clone(),
         options.metadata_server_addr,
@@ -82,6 +88,7 @@ pub(crate) fn chunkserver_setup(
 
     let external_chunkserver = ChunkserverExternal::new(
         chunks,
+        requests_since_heartbeat,
         clients_endpoint,
         internal_endpoint,
         chunkserver_connections,

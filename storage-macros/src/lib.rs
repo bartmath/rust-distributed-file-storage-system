@@ -21,51 +21,56 @@ pub fn derive_message_payload_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
 
-    let (send_arms, recv_arms) = match input.data {
-        Data::Enum(DataEnum { variants, .. }) => {
-            let mut send_arms = Vec::new();
-            let mut recv_arms = Vec::new();
-
-            for (idx, variant) in variants.iter().enumerate() {
-                let variant_idx = idx as u8;
-                let variant_name = &variant.ident;
-
-                if let Fields::Unnamed(fields) = &variant.fields {
-                    if fields.unnamed.len() == 1 {
-                        let payload_ty = &fields.unnamed[0].ty;
-                        send_arms.push(quote! {
-                            #name::#variant_name(payload) => {
-                                send.write_u8(#variant_idx).await?;
-                                payload.send_payload(send).await?
-                            }
-                        });
-
-                        recv_arms.push(quote! {
-                            #variant_idx => anyhow::Ok(#name::#variant_name(#payload_ty::recv_payload(recv).await?)),
-                        });
-                    }
-                }
-            }
-
-            (send_arms, recv_arms)
-        }
-        _ => panic!("Only enums with single unnamed field variants"),
+    // Collecting variant names, indices and payload types
+    let variants = match input.data {
+        Data::Enum(DataEnum { variants, .. }) => variants,
+        _ => panic!("Only enums with single unnamed field variants are supported"),
     };
 
+    let mut variant_idxs = Vec::new();
+    let mut variant_names = Vec::new();
+    let mut payload_types = Vec::new();
+
+    for (idx, variant) in variants.iter().enumerate() {
+        if let Fields::Unnamed(fields) = &variant.fields {
+            if fields.unnamed.len() == 1 {
+                variant_idxs.push(idx as u8);
+                variant_names.push(&variant.ident);
+                payload_types.push(&fields.unnamed[0].ty);
+            } else {
+                panic!("Enum variants must have exactly one field");
+            }
+        } else {
+            panic!("Enum variants must be unnamed (tuple-like)");
+        }
+    }
+
+    // Implement sending and receiving message
     let expanded = quote! {
-        impl Message for #name {
-            async fn send(&self, send: &mut SendStream) -> anyhow::Result<()> {
+        impl crate::common::messages::messages::Message for #name {
+            async fn send(&self, send: &mut ::quinn::SendStream) -> ::anyhow::Result<()> {
                 match self {
-                    #(#send_arms)*
+                    #(
+                        #name::#variant_names(payload) => {
+                            send.write_u8(#variant_idxs).await?;
+                            crate::common::messages::payload::MessagePayload::send_payload(payload, send).await?
+                        }
+                    )*
                 }
-                anyhow::Ok(())
+                ::anyhow::Ok(())
             }
 
-            async fn recv(recv: &mut RecvStream) -> anyhow::Result<Self> {
+            async fn recv(recv: &mut ::quinn::RecvStream) -> ::anyhow::Result<Self> {
+                use ::tokio::io::AsyncReadExt;
                 let variant_id = recv.read_u8().await?;
                 match variant_id {
-                    #(#recv_arms)*
-                    _ => anyhow::bail!("Unknown variant ID: {}", variant_id),
+                    #(
+                        #variant_idxs => {
+                            let payload = <#payload_types as crate::common::messages::payload::MessagePayload>::recv_payload(recv).await?;
+                            ::anyhow::Ok(#name::#variant_names(payload))
+                        }
+                    )*
+                    _ => ::anyhow::bail!("Unknown variant ID: {}", variant_id),
                 }
             }
         }

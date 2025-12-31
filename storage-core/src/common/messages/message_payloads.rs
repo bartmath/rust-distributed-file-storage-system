@@ -1,8 +1,9 @@
 use crate::common::messages::chunk_transfer::ChunkTransfer;
 use crate::common::messages::payload::MessagePayload;
-use crate::common::types::ChunkLocations;
+use crate::common::types::{ChunkLocations, Hostname};
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
@@ -43,7 +44,10 @@ macro_rules! impl_chunk_payload {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChunkServerDiscoverPayload {
     pub server_id: Uuid,
+    pub hostname: Hostname,
     pub rack_id: RackId,
+    pub internal_address: SocketAddr,
+    pub external_address: SocketAddr,
     pub stored_chunks: Vec<ChunkId>, // we will probably need to send also some other info about the chunk, not only the id
 }
 impl MessagePayload for ChunkServerDiscoverPayload {}
@@ -62,8 +66,10 @@ impl MessagePayload for AcceptNewChunkServerPayload {}
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HeartbeatPayload {
     pub server_id: Uuid,
-    pub active_client_connections: u32,
-    pub available_space_bytes: u64,
+    /// Number of requests from clients since last heartbeat was sent.
+    pub client_requests_count: u64,
+    /// Available space on the chunkserver's disk in bytes.
+    pub available_space: u64,
 }
 impl MessagePayload for HeartbeatPayload {}
 

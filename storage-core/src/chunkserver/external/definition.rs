@@ -2,6 +2,7 @@ use crate::chunk::Chunk;
 use crate::types::{ChunkId, ServerId};
 use quinn::{Connection, Endpoint, SendStream};
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use storage_core::common::config::FINAL_STORAGE_ROOT;
 use storage_core::common::{
     ChunkTransfer, ClientMessage, DownloadChunkRequestPayload, DownloadChunkResponsePayload,
@@ -14,6 +15,9 @@ use tokio::{fs, join};
 pub struct ChunkserverExternal {
     chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
 
+    /// Counter of client requests since last heartbeat
+    pub(super) requests_since_heartbeat: Arc<AtomicU64>,
+
     pub(super) client_endpoint: Arc<Endpoint>,
     internal_endpoint: Arc<Endpoint>,
 
@@ -23,12 +27,14 @@ pub struct ChunkserverExternal {
 impl ChunkserverExternal {
     pub(crate) fn new(
         chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
+        requests_since_heartbeat: Arc<AtomicU64>,
         client_endpoint: Arc<Endpoint>,
         internal_endpoint: Arc<Endpoint>,
         chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
     ) -> Self {
         ChunkserverExternal {
             chunks,
+            requests_since_heartbeat,
             client_endpoint,
             internal_endpoint,
             chunkserver_connections,

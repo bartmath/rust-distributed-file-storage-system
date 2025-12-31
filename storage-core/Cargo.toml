@@ -22,6 +22,7 @@ scc = "3.4.6"
 arc-swap = "1.7"
 async-trait = "0.1.89"
 futures = "0.3.31"
+fs2 = "0.4.3"
 
 [lib]
 name = "storage_core"

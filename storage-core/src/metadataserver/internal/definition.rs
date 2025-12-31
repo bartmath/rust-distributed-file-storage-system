@@ -1,4 +1,4 @@
-use crate::types::{ActiveChunkserver, ChunkserverId, FailedChunkserver};
+use crate::types::{ActiveChunkserver, ChunkserverId};
 use quinn::{Endpoint, SendStream};
 use std::sync::Arc;
 use storage_core::common::{ChunkServerDiscoverPayload, HeartbeatPayload};
@@ -9,19 +9,16 @@ pub struct MetadataServerInternal {
     pub(super) internal_endpoint: Arc<Endpoint>,
 
     active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
-    failed_chunkservers: Arc<scc::HashIndex<ChunkserverId, FailedChunkserver>>,
 }
 
 impl MetadataServerInternal {
     pub(crate) fn new(
         internal_endpoint: Arc<Endpoint>,
         active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
-        failed_chunkservers: Arc<scc::HashIndex<ChunkserverId, FailedChunkserver>>,
     ) -> Self {
         MetadataServerInternal {
             internal_endpoint,
             active_chunkservers,
-            failed_chunkservers,
         }
     }
 
@@ -30,7 +27,16 @@ impl MetadataServerInternal {
         send: &mut SendStream,
         payload: ChunkServerDiscoverPayload,
     ) -> anyhow::Result<()> {
-        todo!("implement discovery new chunkserver")
+        // TODO: for now we allow
+        let _ = self
+            .active_chunkservers
+            .insert_async(
+                payload.server_id,
+                ActiveChunkserver::from_chunkserver_discover(&payload),
+            )
+            .await;
+
+        Ok(())
     }
 
     pub(super) async fn accept_heartbeat(
@@ -40,4 +46,6 @@ impl MetadataServerInternal {
     ) -> anyhow::Result<()> {
         todo!("implement accept heartbeat")
     }
+
+    pub(super) async fn prune_inactive_chunkservers(&self) {}
 }

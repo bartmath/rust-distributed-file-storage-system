@@ -1,5 +1,7 @@
+use quinn::Chunk;
 use serde::Serialize;
 use std::net::SocketAddr;
+use storage_core::common::ChunkServerDiscoverPayload;
 use storage_core::common::config::N_CHUNK_REPLICAS;
 use tokio::time::Instant;
 use uuid::Uuid;
@@ -19,7 +21,7 @@ pub(crate) struct ChunkMetadata {
     pub(crate) chunk_id: ChunkId,
 
     pub(crate) primary: ChunkserverId,
-    pub(crate) replicas: [ChunkserverId; N_CHUNK_REPLICAS],
+    pub(crate) replicas: Vec<ChunkserverId>,
 }
 
 pub(crate) struct ActiveChunkserver {
@@ -33,16 +35,27 @@ pub(crate) struct ActiveChunkserver {
     pub(crate) external_address: SocketAddr,
 
     pub(crate) last_heartbeat: Instant,
+    /// Number of client requests to the chunkserver in the period between two last heartbeats.
+    pub(crate) client_request_count: u64,
+    /// Available space on chunkserver's disk in bytes.
+    pub(crate) available_space: u64,
 
     /// Chunks stored on the chunkserver.
     pub(crate) chunks: Vec<ChunkId>,
 }
 
-pub(crate) struct FailedChunkserver {
-    /// Unique server identifier.
-    pub(crate) server_id: ChunkserverId,
-    pub(crate) rack_id: RackId,
-
-    /// Chunks stored on the chunkserver.
-    pub(crate) chunks: Vec<ChunkId>,
+impl ActiveChunkserver {
+    pub(crate) fn from_chunkserver_discover(payload: &ChunkServerDiscoverPayload) -> Self {
+        ActiveChunkserver {
+            server_id: payload.server_id,
+            rack_id: payload.rack_id.clone(),
+            hostname: payload.hostname.clone(),
+            internal_address: payload.internal_address,
+            external_address: payload.external_address,
+            last_heartbeat: Instant::now(),
+            client_request_count: 0,
+            available_space: 0,
+            chunks: vec![], // TODO: when changed from having [ChunkId, N_REPLICAS] to vec accept this and consider allowing for over-replication
+        }
+    }
 }

@@ -5,8 +5,6 @@ use rand::seq::IndexedRandom;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use storage_core::common::config::N_CHUNK_REPLICAS;
-
-type ServerLocation = SocketAddr;
 type PrimaryServerId = ChunkserverId;
 type SecondaryServerId = ChunkserverId;
 
@@ -24,7 +22,7 @@ pub(crate) trait PlacementStrategy {
         &self,
         n_chunks: usize,
         active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
-    ) -> Vec<(PrimaryServerId, [SecondaryServerId; N_CHUNK_REPLICAS])>;
+    ) -> Vec<(PrimaryServerId, Vec<SecondaryServerId>)>;
 }
 
 #[derive(Debug, Clone)]
@@ -36,7 +34,7 @@ impl PlacementStrategy for RandomPlacementStrategy {
         &self,
         n_chunks: usize,
         available_servers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
-    ) -> Vec<(PrimaryServerId, [SecondaryServerId; N_CHUNK_REPLICAS])> {
+    ) -> Vec<(PrimaryServerId, Vec<SecondaryServerId>)> {
         let mut candidates = Vec::new();
         available_servers
             .iter_async(|k, _| {
@@ -60,10 +58,8 @@ impl PlacementStrategy for RandomPlacementStrategy {
 
                 // Already considered the case where too few servers were generated.
                 let primary = selected.remove(0);
-                let secondaries: [SecondaryServerId; N_CHUNK_REPLICAS] =
-                    selected.try_into().unwrap();
 
-                (primary, secondaries)
+                (primary, selected)
             })
             .collect()
     }

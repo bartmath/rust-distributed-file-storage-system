@@ -1,13 +1,13 @@
 use crate::external::placement_strategy::{PlacementStrategy, RandomPlacementStrategy};
 use crate::types::{
-    ActiveChunkserver, ChunkId, ChunkMetadata, ChunkserverId, FailedChunkserver, FileId,
-    FileMetadata,
+    ActiveChunkserver, ChunkId, ChunkMetadata, ChunkserverId, FileId, FileMetadata,
 };
-use futures::future::try_join_all;
+use anyhow::Context;
+use futures::future::{join_all, try_join_all};
 use futures::{StreamExt, TryStreamExt, stream};
 use quinn::{Endpoint, SendStream};
 use std::sync::Arc;
-use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_SPAWNED_TASKS, N_CHUNK_REPLICAS};
+use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_SPAWNED_TASKS};
 use storage_core::common::types::ChunkLocations;
 use storage_core::common::{
     ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkserverLocation,
@@ -25,7 +25,6 @@ pub struct MetadataServerExternal {
     placement_strategy: RandomPlacementStrategy,
 
     active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
-    failed_chunkservers: Arc<scc::HashIndex<ChunkserverId, FailedChunkserver>>,
 
     files: Arc<scc::HashMap<FileId, FileMetadata>>,
     chunks: Arc<scc::HashMap<ChunkId, ChunkMetadata>>,
@@ -35,7 +34,6 @@ impl MetadataServerExternal {
     pub(crate) fn new(
         client_endpoint: Arc<Endpoint>,
         active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
-        failed_chunkservers: Arc<scc::HashIndex<ChunkserverId, FailedChunkserver>>,
         files: Arc<scc::HashMap<FileId, FileMetadata>>,
         chunks: Arc<scc::HashMap<ChunkId, ChunkMetadata>>,
     ) -> Self {
@@ -43,7 +41,6 @@ impl MetadataServerExternal {
             client_endpoint,
             placement_strategy: RandomPlacementStrategy {},
             active_chunkservers,
-            failed_chunkservers,
             files,
             chunks,
         }
@@ -53,7 +50,7 @@ impl MetadataServerExternal {
         active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
         chunk_id: ChunkId,
         primary: ChunkserverId,
-        replicas: [ChunkserverId; N_CHUNK_REPLICAS],
+        replicas: Vec<ChunkserverId>,
     ) -> anyhow::Result<ChunkLocations> {
         let to_location = move |s_id: ChunkserverId| {
             let active_chunkservers = active_chunkservers.clone();
@@ -67,24 +64,22 @@ impl MetadataServerExternal {
                         server_location: server_entry.get().external_address,
                         server_hostname: server_entry.get().hostname.clone(),
                     })
-                    .ok_or_else(|| anyhow::anyhow!("Chunkserver {:?} not found", s_id))
             }
         };
 
         let to_location_for_batch = to_location.clone();
-        let to_locations = move |s_ids: [ChunkserverId; N_CHUNK_REPLICAS]| async move {
-            try_join_all(s_ids.iter().map(|&id| to_location_for_batch(id)))
-                .await?
-                .try_into()
-                .map_err(|_| {
-                    anyhow::anyhow!("Each chunk should be assigned N_CHUNK_REPLICAS secondaries")
-                })
+        let to_locations = move |s_ids: Vec<ChunkserverId>| async move {
+            join_all(s_ids.iter().map(|&id| to_location_for_batch(id)))
+                .await
+                .into_iter()
+                .flatten()
+                .collect()
         };
 
         Ok(ChunkLocations {
             chunk_id,
-            primary: to_location(primary).await?,
-            secondaries: to_locations(replicas).await?,
+            primary: to_location(primary).await.context("Primary not found")?,
+            replicas: to_locations(replicas).await,
         })
     }
 
