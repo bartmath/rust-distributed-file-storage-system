@@ -1106,6 +1106,7 @@ dependencies = [
  "rand",
  "rcgen",
  "rustls",
+ "rustls-platform-verifier",
  "scc",
  "serde",
  "storage-macros",

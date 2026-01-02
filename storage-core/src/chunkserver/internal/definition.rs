@@ -41,6 +41,7 @@ pub struct ChunkserverInternal {
 
     metadata_reconnect_lock: Arc<Mutex<()>>,
     metadata_server_connection: Arc<ArcSwap<Option<Connection>>>,
+    #[allow(dead_code)]
     chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
 }
 

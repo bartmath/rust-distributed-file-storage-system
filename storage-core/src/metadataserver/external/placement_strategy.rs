@@ -2,7 +2,6 @@ use crate::types::{ActiveChunkserver, ChunkserverId};
 use async_trait::async_trait;
 use rand::rng;
 use rand::seq::IndexedRandom;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use storage_core::common::config::N_CHUNK_REPLICAS;
 type PrimaryServerId = ChunkserverId;

@@ -1,30 +1,20 @@
-use super::config::ChunkserverOpt;
-use crate::external::ChunkserverExternal;
-use crate::internal::ChunkserverInternal;
+use crate::config::MetadataServerOpt;
+use crate::external::MetadataServerExternal;
+use crate::internal::MetadataServerInternal;
 use anyhow::Result;
 use quinn::Endpoint;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use rustls::pki_types::CertificateDer;
 use rustls_platform_verifier::BuilderVerifierExt;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 use storage_core::common;
-use storage_core::common::config::{FINAL_STORAGE_ROOT, TMP_STORAGE_ROOT};
 
-pub(crate) fn chunkserver_setup(
-    options: ChunkserverOpt,
-) -> Result<(ChunkserverInternal, ChunkserverExternal)> {
-    // Load static variables
-    FINAL_STORAGE_ROOT
-        .set(options.final_root)
-        .expect("Final storage root set failed");
-    TMP_STORAGE_ROOT
-        .set(options.tmp_root)
-        .expect("Temporary storage root set failed");
-
+pub(crate) fn metadata_server_setup(
+    options: MetadataServerOpt,
+) -> Result<(MetadataServerInternal, MetadataServerExternal)> {
     // Set up QUIC endpoints
     let certificate_provider = common::certificate_provider(
-        Some(options.chunkserver_hostname.clone()),
+        Some(options.hostname.clone()),
         options.key,
         options.cert.clone(),
     )?;
@@ -62,10 +52,7 @@ pub(crate) fn chunkserver_setup(
 
     // TODO: Temporary solution to make servers accept self-signed certificates.
     if options.cert.is_none() {
-        let path = std::env::current_dir()
-            .expect("Couldn't get current directory")
-            .join("certificates")
-            .join(options.metadata_server_hostname.clone());
+        let path = std::env::current_dir().expect("Couldn't get current directory");
         let cert_path = path.join("cert.der");
         let server_cert_der = std::fs::read(&cert_path).expect("Unable to read certificate");
         let mut roots = rustls::RootCertStore::empty();
@@ -90,30 +77,17 @@ pub(crate) fn chunkserver_setup(
     let internal_endpoint = Arc::new(internal_endpoint);
     let clients_endpoint = Arc::new(clients_endpoint);
 
-    let requests_since_heartbeat = Arc::new(AtomicU64::new(0));
+    let active_chunkservers = Arc::new(scc::HashMap::new());
     let chunks = Arc::new(scc::HashMap::new());
-    let chunkserver_connections = Arc::new(scc::HashMap::new());
 
-    let internal_chunkserver = ChunkserverInternal::new(
-        options.chunkserver_hostname,
-        options.rack_id,
-        options.advertised_internal_addr,
-        options.advertised_external_addr,
-        requests_since_heartbeat.clone(),
-        chunks.clone(),
-        internal_endpoint.clone(),
-        options.metadata_server_addr,
-        options.metadata_server_hostname,
-        chunkserver_connections.clone(),
-    );
-
-    let external_chunkserver = ChunkserverExternal::new(
-        chunks,
-        requests_since_heartbeat,
-        clients_endpoint,
+    let metadata_server_internal = MetadataServerInternal::new(
         internal_endpoint,
-        chunkserver_connections,
+        active_chunkservers.clone(),
+        chunks.clone(),
     );
 
-    Ok((internal_chunkserver, external_chunkserver))
+    let metadata_server_external =
+        MetadataServerExternal::new(clients_endpoint, active_chunkservers, chunks);
+
+    Ok((metadata_server_internal, metadata_server_external))
 }

@@ -34,14 +34,13 @@ impl MetadataServerExternal {
     pub(crate) fn new(
         client_endpoint: Arc<Endpoint>,
         active_chunkservers: Arc<scc::HashMap<ChunkserverId, ActiveChunkserver>>,
-        files: Arc<scc::HashMap<FileId, FileMetadata>>,
         chunks: Arc<scc::HashMap<ChunkId, ChunkMetadata>>,
     ) -> Self {
         MetadataServerExternal {
             client_endpoint,
             placement_strategy: RandomPlacementStrategy {},
             active_chunkservers,
-            files,
+            files: Arc::new(scc::HashMap::new()),
             chunks,
         }
     }
@@ -220,16 +219,16 @@ impl MetadataServerExternal {
 
     pub(super) async fn fetch_folder_structure(
         &self,
-        send: &mut SendStream,
-        payload: GetClientFolderStructureRequestPayload,
+        _send: &mut SendStream,
+        _payload: GetClientFolderStructureRequestPayload,
     ) -> anyhow::Result<()> {
         todo!("unimplemented fetch_folder_structure")
     }
 
     pub(super) async fn update_folder_structure(
         &self,
-        send: &mut SendStream,
-        payload: UpdateClientFolderStructurePayload,
+        _send: &mut SendStream,
+        _payload: UpdateClientFolderStructurePayload,
     ) -> anyhow::Result<()> {
         todo!("unimplemented update_folder_structure")
     }

@@ -32,7 +32,7 @@ impl MetadataServerInternal {
 
     pub(super) async fn discover_new_chunkserver(
         &self,
-        send: &mut SendStream,
+        _send: &mut SendStream,
         payload: ChunkServerDiscoverPayload,
     ) -> anyhow::Result<()> {
         // TODO: check which chunks haven't been deleted yet and accept only those.
@@ -50,7 +50,7 @@ impl MetadataServerInternal {
 
     pub(super) async fn accept_heartbeat(
         &self,
-        send: &mut SendStream,
+        _send: &mut SendStream,
         payload: HeartbeatPayload,
     ) -> anyhow::Result<()> {
         self.active_chunkservers
@@ -61,11 +61,23 @@ impl MetadataServerInternal {
             })
             .await;
 
+        // TODO: send instructions about replication, deletion etc.
+        dbg!(
+            "Heartbeat received!",
+            payload.available_space,
+            payload.client_requests_count
+        );
+
         Ok(())
     }
 
     pub(super) async fn prune_inactive_chunkservers(&self) {
         loop {
+            dbg!(
+                "Pruning inactive chunkservers",
+                self.active_chunkservers.len()
+            );
+
             let mut lost_chunk_replicas = Vec::new();
             self.active_chunkservers
                 .retain_async(|_, server| {
@@ -95,7 +107,7 @@ impl MetadataServerInternal {
                 }
             }
 
-            let updated_chunks: HashSet<_> = lost_chunk_replicas
+            let _updated_chunks: HashSet<_> = lost_chunk_replicas
                 .into_iter()
                 .map(|(_, chunks)| chunks)
                 .flatten()

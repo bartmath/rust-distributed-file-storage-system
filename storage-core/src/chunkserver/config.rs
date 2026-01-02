@@ -9,20 +9,20 @@ pub(super) struct ChunkserverOpt {
     /// file to log TLS keys to for debugging
     #[clap(long = "keylog", default_value = "false")]
     pub(super) keylog: bool,
-    /// directory to serve files from
-    pub(super) root: PathBuf,
+    /// temporary directory to save unverified files to
+    #[clap(long = "tmp-root", default_value = "tmp/")]
+    pub(super) tmp_root: PathBuf,
+    /// final directory to save files to
+    #[clap(long = "final-root", default_value = "final/")]
+    pub(super) final_root: PathBuf,
     /// TLS private key in PEM format
-    #[clap(short = 'k', long = "key", requires = "cert", default_value = "None")]
+    #[clap(short = 'k', long = "key", requires = "cert")]
     pub(super) key: Option<PathBuf>,
     /// TLS certificate in PEM format
-    #[clap(short = 'c', long = "cert", requires = "key", default_value = "None")]
+    #[clap(short = 'c', long = "cert", requires = "key")]
     pub(super) cert: Option<PathBuf>,
     /// Chunkserver's hostname for client and other chunkserver to connect to.
-    #[clap(
-        short = 'h',
-        long = "chunkserver-hostname",
-        default_value = "chunkserver-1"
-    )]
+    #[clap(long = "chunkserver-hostname", default_value = "chunkserver-1")]
     pub(super) chunkserver_hostname: Hostname,
     /// Address advertised to clients to connect to.
     #[clap(long = "advertised-external-addr", default_value = "[::]:12345")]

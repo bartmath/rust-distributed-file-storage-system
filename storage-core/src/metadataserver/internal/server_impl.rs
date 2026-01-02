@@ -10,7 +10,7 @@ impl QuicServer for MetadataServerInternal {
     }
 
     async fn setup(&self) -> anyhow::Result<()> {
-        let mut server_clone = self.clone();
+        let server_clone = self.clone();
         tokio::spawn(async move { server_clone.prune_inactive_chunkservers().await });
         Ok(())
     }

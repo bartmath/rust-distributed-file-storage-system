@@ -19,8 +19,9 @@ pub struct ChunkserverExternal {
     pub(super) requests_since_heartbeat: Arc<AtomicU64>,
 
     pub(super) client_endpoint: Arc<Endpoint>,
+    #[allow(dead_code)]
     internal_endpoint: Arc<Endpoint>,
-
+    #[allow(dead_code)]
     chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
 }
 

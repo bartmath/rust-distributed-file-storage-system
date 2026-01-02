@@ -1,3 +1,4 @@
+use crate::common::types::Hostname;
 use anyhow::{Context, Result, bail};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -11,6 +12,7 @@ pub trait CertificateProvider {
 }
 
 pub fn certificate_provider(
+    hostname: Option<Hostname>,
     key: Option<PathBuf>,
     cert: Option<PathBuf>,
 ) -> Result<Box<dyn CertificateProvider>> {
@@ -19,7 +21,9 @@ pub fn certificate_provider(
     } else {
         #[cfg(debug_assertions)]
         {
-            Ok(Box::new(SelfSignedCertificateProvider {}))
+            Ok(Box::new(SelfSignedCertificateProvider::new(
+                hostname.expect("Hostname not provided for self-generated certificate"),
+            )))
         }
         #[cfg(not(debug_assertions))]
         {
@@ -69,12 +73,22 @@ impl CertificateProvider for FileCertificateProvider {
 }
 
 #[cfg(debug_assertions)]
-struct SelfSignedCertificateProvider;
+struct SelfSignedCertificateProvider {
+    hostname: Hostname,
+}
+
+impl SelfSignedCertificateProvider {
+    fn new(hostname: Hostname) -> Self {
+        SelfSignedCertificateProvider { hostname }
+    }
+}
 
 #[cfg(debug_assertions)]
 impl CertificateProvider for SelfSignedCertificateProvider {
     fn get_certificate(&self) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
-        let path = std::env::current_dir()?;
+        let path = std::env::current_dir()?
+            .join("certificates")
+            .join(&self.hostname);
         let cert_path = path.join("cert.der");
         let key_path = path.join("key.der");
         let (cert, key) = match fs::read(&cert_path).and_then(|x| Ok((x, fs::read(&key_path)?))) {
@@ -84,7 +98,7 @@ impl CertificateProvider for SelfSignedCertificateProvider {
             ),
             Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
                 info!("generating self-signed certificate");
-                let cert = rcgen::generate_simple_self_signed(vec!["debug.localhost".into()])?;
+                let cert = rcgen::generate_simple_self_signed(vec![self.hostname.clone()])?;
                 let key = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
                 let cert = cert.cert.into();
                 fs::create_dir_all(path).context("failed to create certificate directory")?;
@@ -98,7 +112,7 @@ impl CertificateProvider for SelfSignedCertificateProvider {
             }
         };
 
-        println!("files created");
+        dbg!("Created self-signed certificates");
         Ok((vec![cert], key))
     }
 }
