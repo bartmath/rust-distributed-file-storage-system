@@ -22,19 +22,19 @@ pub(super) struct ChunkserverOpt {
     #[clap(short = 'c', long = "cert", requires = "key")]
     pub(super) cert: Option<PathBuf>,
     /// Chunkserver's hostname for client and other chunkserver to connect to.
-    #[clap(long = "chunkserver-hostname", default_value = "chunkserver-1")]
+    #[clap(long = "chunkserver-hostname", default_value = "chunkserver")]
     pub(super) chunkserver_hostname: Hostname,
     /// Address advertised to clients to connect to.
-    #[clap(long = "advertised-external-addr", default_value = "[::]:12345")]
+    #[clap(long = "advertised-external-addr")]
     pub(super) advertised_external_addr: SocketAddr,
     /// Address advertised to other chunkservers to connect to.
-    #[clap(long = "advertised-internal-addr", default_value = "[::]:12346")]
+    #[clap(long = "advertised-internal-addr")]
     pub(super) advertised_internal_addr: SocketAddr,
     /// Address to listen on for connection from clients.
-    #[clap(long = "client-socket-addr", default_value = "[::]:12345")]
+    #[clap(long = "client-socket-addr")]
     pub(super) client_socket_addr: SocketAddr,
     /// Address to listen on for connection from internal servers.
-    #[clap(long = "internal-socket-addr", default_value = "[::]:12346")]
+    #[clap(long = "internal-socket-addr")]
     pub(super) internal_socket_addr: SocketAddr,
     /// Metadata server hostname.
     #[clap(long = "metadata-server-hostname", default_value = "metadata-server")]

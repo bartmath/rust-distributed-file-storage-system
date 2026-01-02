@@ -1,9 +1,23 @@
-mod chunk;
-mod config;
-mod external;
-mod internal;
-mod setup;
-mod types;
+//! Creates and runs **chunkserver**.
+//!
+//! # Running in Debug Mode
+//! - **Behavior:** Prints debugging info about operations and auto-generates self-signed certificates.
+//! - **Example usage**
+//! ```bash
+//!   cargo run --bin chunkserver -- \
+//!     --advertised-external-addr [::1]:12345 \
+//!     --advertised-internal-addr [::1]:12346 \
+//!     --client-socket-addr [::]:12345 \
+//!     --internal-socket-addr [::]:12346
+//!   ```
+//!
+//! # Running in Release Mode
+//! - **Command:** `cargo run --release --bin chunkserver -- [OPTIONS]`
+//! - **Requirements:**
+//!   - Valid TLS certificate files (`--cert`, `--key`)
+//!   - All required arguments must be provided (see `--help` for full list)
+//!   - Run `cargo run --release --bin chunkserver -- --help` for details
+//! - **WARNING:** Self-signed certificates are NOT available in release builds for security reasons.
 
 use crate::external::ChunkserverExternal;
 use crate::internal::ChunkserverInternal;
@@ -11,6 +25,14 @@ use clap::Parser;
 use config::ChunkserverOpt;
 use setup::chunkserver_setup;
 use storage_core::common::QuicServer;
+
+mod chunk;
+mod config;
+mod external;
+mod internal;
+mod setup;
+mod types;
+
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
