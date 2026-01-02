@@ -1,5 +1,7 @@
+use crate::common::UploadChunkPayload;
+use crate::common::messages::chunk_transfer::ChunkTransfer;
+use crate::common::messages::messages::{ChunkserverExternalMessage, Message};
 use crate::common::types::{ChunkId, Hostname, ServerConnections, ServerLocation};
-use crate::common::{ChunkserverExternalMessage, Message, UploadChunkPayload};
 use quinn::{Connection, Endpoint};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -54,8 +56,10 @@ impl SendChunkMetadata {
         let payload = UploadChunkPayload {
             chunk_id: self.chunk_id,
             chunk_size: self.chunk_size,
-            offset: self.offset,
-            data: self.file_path,
+            chunk_transfer: ChunkTransfer {
+                offset: Some(self.offset),
+                data: self.file_path,
+            },
         };
 
         let message = ChunkserverExternalMessage::UploadChunk(payload);
@@ -68,11 +72,11 @@ impl SendChunkMetadata {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChunkserverLocation {
-    chunk_id: ChunkId,
-    server_location: ServerLocation,
-    server_hostname: Hostname,
+    pub chunk_id: ChunkId,
+    pub server_location: ServerLocation,
+    pub server_hostname: Hostname,
 }
 
 impl ChunkserverLocation {

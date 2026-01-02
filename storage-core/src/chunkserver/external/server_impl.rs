@@ -1,8 +1,10 @@
 use crate::external::ChunkserverExternal;
 use async_trait::async_trait;
 use quinn::{Endpoint, RecvStream, SendStream};
+use std::sync::atomic::Ordering;
 use storage_core::common::ChunkserverExternalMessage::{DownloadChunkRequest, UploadChunk};
-use storage_core::common::{ChunkserverExternalMessage, Message, QuicServer};
+use storage_core::common::ClientMessage::RequestStatus;
+use storage_core::common::{ChunkserverExternalMessage, Message, QuicServer, RequestStatusPayload};
 
 #[async_trait]
 impl QuicServer for ChunkserverExternal {
@@ -19,10 +21,19 @@ impl QuicServer for ChunkserverExternal {
         mut send: SendStream,
         mut recv: RecvStream,
     ) -> anyhow::Result<()> {
-        match ChunkserverExternalMessage::recv(&mut recv).await? {
-            UploadChunk(payload) => self.handle_upload(send, payload).await?,
-            DownloadChunkRequest(payload) => self.handle_download(send, payload).await?,
+        self.requests_since_heartbeat
+            .fetch_add(1, Ordering::Relaxed);
+
+        let res = match ChunkserverExternalMessage::recv(&mut recv).await? {
+            UploadChunk(payload) => self.handle_upload(&mut send, payload).await,
+            DownloadChunkRequest(payload) => self.handle_download(&mut send, payload).await,
         };
+
+        if res.is_err() {
+            let _ = RequestStatus(RequestStatusPayload::InternalServerError)
+                .send(&mut send)
+                .await;
+        }
 
         Ok(())
     }

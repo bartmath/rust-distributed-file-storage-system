@@ -1,10 +1,10 @@
-use crate::common::message_payload::*;
+use crate::common::messages::message_payloads::*;
 use anyhow::Result;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use storage_macros::Message;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 
 #[allow(async_fn_in_trait)]
 pub trait Message: Serialize + DeserializeOwned {
@@ -13,11 +13,17 @@ pub trait Message: Serialize + DeserializeOwned {
 }
 
 #[derive(Debug, Serialize, Deserialize, Message)]
-pub enum MetadataServerMessage {
+pub enum MetadataServerExternalMessage {
+    ChunkPlacementRequest(ChunkPlacementRequestPayload),
+    GetFilePlacementRequest(GetFilePlacementRequestPayload),
+    GetClientFolderStructureRequest(GetClientFolderStructureRequestPayload),
+    UpdateClientFolderStructure(UpdateClientFolderStructurePayload),
+}
+
+#[derive(Debug, Serialize, Deserialize, Message)]
+pub enum MetadataServerInternalMessage {
     ChunkServerDiscover(ChunkServerDiscoverPayload),
     Heartbeat(HeartbeatPayload),
-    ChunkPlacementRequest(ChunkPlacementRequestPayload),
-    GetChunkPlacementRequest(GetChunkPlacementRequestPayload),
 }
 
 #[derive(Debug, Serialize, Deserialize, Message)]
@@ -31,9 +37,12 @@ pub enum ChunkserverInternalMessage {
     AcceptNewChunkserver(AcceptNewChunkServerPayload),
 }
 
+// TODO probably not needed since it's client who initiates a connection
 #[derive(Debug, Serialize, Deserialize, Message)]
 pub enum ClientMessage {
     ChunkPlacementResponse(ChunkPlacementResponsePayload),
-    GetChunkPlacementResponse(GetChunkPlacementResponsePayload),
+    GetFilePlacementResponse(GetFilePlacementResponsePayload),
     DownloadChunkResponse(DownloadChunkResponsePayload),
+    RequestStatus(RequestStatusPayload),
+    GetClientFolderStructureResponse(GetClientFolderStructureResponsePayload),
 }

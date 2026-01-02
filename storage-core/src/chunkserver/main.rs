@@ -1,47 +1,34 @@
+mod chunk;
 mod config;
 mod external;
 mod internal;
 mod setup;
+mod types;
 
 use crate::external::ChunkserverExternal;
 use crate::internal::ChunkserverInternal;
-use anyhow::Result;
 use clap::Parser;
 use config::ChunkserverOpt;
 use setup::chunkserver_setup;
 use storage_core::common::QuicServer;
 
-fn main() {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::FmtSubscriber::builder()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .finish(),
-    )
-    .unwrap();
     let opt = ChunkserverOpt::parse();
     let (internal_chunkservers, external_chunkserver) =
-        chunkserver_setup(opt).expect("TODO: Couldn't setup chunkservers");
+        chunkserver_setup(opt).expect("Couldn't setup chunkservers");
 
-    let code = {
-        if let Err(e) = run(internal_chunkservers, external_chunkserver) {
-            eprintln!("ERROR: {e}");
-            1
-        } else {
-            0
-        }
-    };
-    std::process::exit(code);
+    run(internal_chunkservers, external_chunkserver).await
 }
 
-#[tokio::main]
 async fn run(
     internal_chunkserver: ChunkserverInternal,
     external_chunkserver: ChunkserverExternal,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let internal_handle = tokio::spawn(async move { internal_chunkserver.run().await });
     let external_handle = tokio::spawn(async move { external_chunkserver.run().await });
 

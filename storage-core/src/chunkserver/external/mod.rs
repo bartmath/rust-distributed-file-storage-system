@@ -1,5 +1,4 @@
-mod chunkserver_definition;
-mod chunkserver_impl;
+mod definition;
 mod server_impl;
 
-pub use self::chunkserver_definition::ChunkserverExternal;
+pub use self::definition::ChunkserverExternal;
