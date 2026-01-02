@@ -1,3 +1,23 @@
+//! Creates and runs **metadata server**.
+//!
+//! # Running in Debug Mode
+//! - **Behavior:** Prints debugging info about operations and auto-generates self-signed certificates
+//! - **Command:** `cargo run --bin metadataserver`
+//!
+//! # Running in Release Mode
+//! - **Command:** `cargo run --release --bin metadataserver -- [OPTIONS]`
+//! - **Requirements:**
+//!   - Valid TLS certificate files (`--cert`, `--key`)
+//!   - All required arguments must be provided (see `--help` for full list)
+//!   - Run `cargo run --release --bin metadataserver -- --help` for details
+//! - **WARNING:** Self-signed certificates are NOT available in release builds for security reasons.
+//!
+//! ## Important Note
+//! The Metadataserver will **panic** (fail to start or process requests) unless at least
+//! **N_CHUNK_REPLICAS + 1** chunkservers are connected.
+//!
+//! For example, if `N_CHUNK_REPLICAS` is 2, you need **3** connected chunkservers.
+
 use crate::config::MetadataServerOpt;
 use crate::external::MetadataServerExternal;
 use crate::internal::MetadataServerInternal;
