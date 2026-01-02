@@ -8,6 +8,7 @@ use rustls::pki_types::CertificateDer;
 use rustls_platform_verifier::BuilderVerifierExt;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use std::fs;
 use storage_core::common;
 use storage_core::common::config::{FINAL_STORAGE_ROOT, TMP_STORAGE_ROOT};
 
@@ -15,11 +16,17 @@ pub(crate) fn chunkserver_setup(
     options: ChunkserverOpt,
 ) -> Result<(ChunkserverInternal, ChunkserverExternal)> {
     // Load static variables
+    let final_storage_root = std::env::current_dir()?.join(options.final_root);
+    let tmp_storage_root = std::env::current_dir()?.join(options.tmp_root);
+
+    fs::create_dir_all(final_storage_root.clone()).expect("Couldn't create final storage root");
+    fs::create_dir_all(tmp_storage_root.clone()).expect("Couldn't create tmp storage root");
+
     FINAL_STORAGE_ROOT
-        .set(options.final_root)
+        .set(final_storage_root)
         .expect("Final storage root set failed");
     TMP_STORAGE_ROOT
-        .set(options.tmp_root)
+        .set(tmp_storage_root)
         .expect("Temporary storage root set failed");
 
     // Set up QUIC endpoints

@@ -6,13 +6,13 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[clap(name = "server")]
 pub(super) struct ChunkserverOpt {
-    /// file to log TLS keys to for debugging
+    /// File to log TLS keys to for debugging
     #[clap(long = "keylog", default_value = "false")]
     pub(super) keylog: bool,
-    /// temporary directory to save unverified files to
+    /// (Relative) path to temporary directory to save unverified files to.
     #[clap(long = "tmp-root", default_value = "tmp/")]
     pub(super) tmp_root: PathBuf,
-    /// final directory to save files to
+    /// (Relative) path to final directory to save files to.
     #[clap(long = "final-root", default_value = "final/")]
     pub(super) final_root: PathBuf,
     /// TLS private key in PEM format

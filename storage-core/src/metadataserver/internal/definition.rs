@@ -5,6 +5,7 @@ use std::mem;
 use std::sync::Arc;
 use storage_core::common::config::{HEARTBEAT_INTERVAL, HEARTBEAT_MARGIN};
 use storage_core::common::{ChunkServerDiscoverPayload, HeartbeatPayload};
+use storage_core::dbg_println;
 use tokio::time::{Instant, sleep};
 
 /// 'MetadataServerInternal' is a struct used for communication with chunkservers.
@@ -37,6 +38,8 @@ impl MetadataServerInternal {
     ) -> anyhow::Result<()> {
         // TODO: check which chunks haven't been deleted yet and accept only those.
         // TODO: send a response with chunks the chunkserver has to delete - they're to old.
+        dbg_println!("New chunk server discovered: {}", payload.server_id);
+
         let _ = self
             .active_chunkservers
             .insert_async(
@@ -62,8 +65,9 @@ impl MetadataServerInternal {
             .await;
 
         // TODO: send instructions about replication, deletion etc.
-        dbg!(
-            "Heartbeat received!",
+        dbg_println!(
+            "Heartbeat received from {}. free_space = {}, client_rpm = {}",
+            payload.server_id,
             payload.available_space,
             payload.client_requests_count
         );
@@ -73,8 +77,8 @@ impl MetadataServerInternal {
 
     pub(super) async fn prune_inactive_chunkservers(&self) {
         loop {
-            dbg!(
-                "Pruning inactive chunkservers",
+            dbg_println!(
+                "Pruning inactive chunkservers; active_chunkservers: {}",
                 self.active_chunkservers.len()
             );
 

@@ -9,6 +9,7 @@ use storage_core::common::config::{FINAL_STORAGE_ROOT, HEARTBEAT_INTERVAL};
 use storage_core::common::{
     ChunkServerDiscoverPayload, HeartbeatPayload, Message, MetadataServerInternalMessage,
 };
+use storage_core::dbg_println;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -130,7 +131,9 @@ impl ChunkserverInternal {
             })
             .await;
 
-        let mut send_stream = metadata_server_conn.open_uni().await?;
+        let (mut send, mut _recv) = metadata_server_conn.open_bi().await?;
+
+        dbg_println!("Discovering Metadata server");
 
         MetadataServerInternalMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
             server_id: self.server_id,
@@ -140,7 +143,7 @@ impl ChunkserverInternal {
             external_address: self.external_address,
             stored_chunks: stored_chunks_ids,
         })
-        .send(&mut send_stream)
+        .send(&mut send)
         .await
 
         // TODO: maybe the MetadataServer will return some answer
@@ -148,9 +151,9 @@ impl ChunkserverInternal {
 
     pub(super) async fn send_heartbeat(&mut self) -> anyhow::Result<()> {
         let conn = self.get_metadata_server_connection().await?;
-        let (mut send, recv) = conn.open_bi().await?;
-
         loop {
+            sleep(HEARTBEAT_INTERVAL).await;
+
             let client_requests_count = self.requests_since_heartbeat.swap(0, Ordering::Relaxed);
             let available_space = fs2::available_space(
                 FINAL_STORAGE_ROOT
@@ -162,13 +165,16 @@ impl ChunkserverInternal {
             // We allow up to 90% usage of the disk.
             let available_space = available_space * 9 / 10;
 
-            let message = MetadataServerInternalMessage::Heartbeat(HeartbeatPayload {
+            let (mut send, _recv) = conn.open_bi().await?;
+
+            dbg_println!("Sending heartbeat");
+            MetadataServerInternalMessage::Heartbeat(HeartbeatPayload {
                 server_id: self.server_id,
                 client_requests_count,
                 available_space,
-            });
-            message.send(&mut send).await?;
-            sleep(HEARTBEAT_INTERVAL).await;
+            })
+            .send(&mut send)
+            .await?;
         }
     }
 }

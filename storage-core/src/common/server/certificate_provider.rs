@@ -1,4 +1,5 @@
 use crate::common::types::Hostname;
+use crate::dbg_println;
 use anyhow::{Context, Result, bail};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -112,7 +113,7 @@ impl CertificateProvider for SelfSignedCertificateProvider {
             }
         };
 
-        dbg!("Created self-signed certificates");
+        dbg_println!("Created self-signed certificates");
         Ok((vec![cert], key))
     }
 }
