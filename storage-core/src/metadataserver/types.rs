@@ -1,8 +1,5 @@
-use quinn::Chunk;
-use serde::Serialize;
 use std::net::SocketAddr;
 use storage_core::common::ChunkServerDiscoverPayload;
-use storage_core::common::config::N_CHUNK_REPLICAS;
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -20,7 +17,8 @@ pub(crate) struct FileMetadata {
 pub(crate) struct ChunkMetadata {
     pub(crate) chunk_id: ChunkId,
 
-    pub(crate) primary: ChunkserverId,
+    // Id of the primary server or None, if the primary isn't selected yet.
+    pub(crate) primary: Option<ChunkserverId>,
     pub(crate) replicas: Vec<ChunkserverId>,
 }
 
@@ -55,7 +53,19 @@ impl ActiveChunkserver {
             last_heartbeat: Instant::now(),
             client_request_count: 0,
             available_space: 0,
-            chunks: vec![], // TODO: when changed from having [ChunkId, N_REPLICAS] to vec accept this and consider allowing for over-replication
+            chunks: payload.stored_chunks.clone(),
         }
+    }
+
+    pub(crate) fn update_from_heartbeat(
+        mut self,
+        client_requests_count: u64,
+        available_space: u64,
+    ) -> Self {
+        self.last_heartbeat = Instant::now();
+        self.client_request_count = client_requests_count;
+        self.available_space = available_space;
+
+        self
     }
 }

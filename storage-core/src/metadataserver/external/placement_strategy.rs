@@ -21,7 +21,7 @@ pub(crate) trait PlacementStrategy {
     async fn select_servers(
         &self,
         n_chunks: usize,
-        active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
+        active_chunkservers: Arc<scc::HashMap<ChunkserverId, ActiveChunkserver>>,
     ) -> Vec<(PrimaryServerId, Vec<SecondaryServerId>)>;
 }
 
@@ -33,7 +33,7 @@ impl PlacementStrategy for RandomPlacementStrategy {
     async fn select_servers(
         &self,
         n_chunks: usize,
-        available_servers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
+        available_servers: Arc<scc::HashMap<ChunkserverId, ActiveChunkserver>>,
     ) -> Vec<(PrimaryServerId, Vec<SecondaryServerId>)> {
         let mut candidates = Vec::new();
         available_servers

@@ -5,7 +5,6 @@ use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 use storage_core::common::config::{FINAL_STORAGE_ROOT, HEARTBEAT_INTERVAL};
 use storage_core::common::{
     ChunkServerDiscoverPayload, HeartbeatPayload, Message, MetadataServerInternalMessage,
@@ -122,9 +121,6 @@ impl ChunkserverInternal {
         &self,
         metadata_server_conn: Connection,
     ) -> anyhow::Result<()> {
-        // TODO: change from removing chunks to keeping them
-        self.chunks.retain_async(|_, _| false).await;
-
         let mut stored_chunks_ids = Vec::new();
         self.chunks
             .iter_async(|k, _| {
@@ -133,21 +129,20 @@ impl ChunkserverInternal {
             })
             .await;
 
-        let message =
-            MetadataServerInternalMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
-                server_id: self.server_id,
-                hostname: self.hostname.to_string(),
-                rack_id: self.rack_id.to_string(),
-                internal_address: self.internal_address,
-                external_address: self.external_address,
-                stored_chunks: stored_chunks_ids,
-            });
-
         let mut send_stream = metadata_server_conn.open_uni().await?;
 
-        message.send(&mut send_stream).await
+        MetadataServerInternalMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
+            server_id: self.server_id,
+            hostname: self.hostname.to_string(),
+            rack_id: self.rack_id.to_string(),
+            internal_address: self.internal_address,
+            external_address: self.external_address,
+            stored_chunks: stored_chunks_ids,
+        })
+        .send(&mut send_stream)
+        .await
 
-        // TODO: maybe the metadata server will return some answer
+        // TODO: maybe the MetadataServer will return some answer
     }
 
     pub(super) async fn send_heartbeat(&mut self) -> anyhow::Result<()> {
@@ -163,7 +158,7 @@ impl ChunkserverInternal {
             )
             .unwrap_or(0);
 
-            // We allow off up to 90% usage of the disk.
+            // We allow up to 90% usage of the disk.
             let available_space = available_space * 9 / 10;
 
             let message = MetadataServerInternalMessage::Heartbeat(HeartbeatPayload {

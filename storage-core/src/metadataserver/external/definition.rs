@@ -3,7 +3,7 @@ use crate::types::{
     ActiveChunkserver, ChunkId, ChunkMetadata, ChunkserverId, FileId, FileMetadata,
 };
 use anyhow::Context;
-use futures::future::{join_all, try_join_all};
+use futures::future::join_all;
 use futures::{StreamExt, TryStreamExt, stream};
 use quinn::{Endpoint, SendStream};
 use std::sync::Arc;
@@ -24,7 +24,7 @@ pub struct MetadataServerExternal {
 
     placement_strategy: RandomPlacementStrategy,
 
-    active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
+    active_chunkservers: Arc<scc::HashMap<ChunkserverId, ActiveChunkserver>>,
 
     files: Arc<scc::HashMap<FileId, FileMetadata>>,
     chunks: Arc<scc::HashMap<ChunkId, ChunkMetadata>>,
@@ -33,7 +33,7 @@ pub struct MetadataServerExternal {
 impl MetadataServerExternal {
     pub(crate) fn new(
         client_endpoint: Arc<Endpoint>,
-        active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
+        active_chunkservers: Arc<scc::HashMap<ChunkserverId, ActiveChunkserver>>,
         files: Arc<scc::HashMap<FileId, FileMetadata>>,
         chunks: Arc<scc::HashMap<ChunkId, ChunkMetadata>>,
     ) -> Self {
@@ -47,7 +47,7 @@ impl MetadataServerExternal {
     }
 
     async fn resolve_chunk_locations(
-        active_chunkservers: Arc<scc::HashIndex<ChunkserverId, ActiveChunkserver>>,
+        active_chunkservers: Arc<scc::HashMap<ChunkserverId, ActiveChunkserver>>,
         chunk_id: ChunkId,
         primary: ChunkserverId,
         replicas: Vec<ChunkserverId>,
@@ -128,7 +128,7 @@ impl MetadataServerExternal {
                     *chunk_id,
                     ChunkMetadata {
                         chunk_id: *chunk_id,
-                        primary: primary.clone(),
+                        primary: Some(primary.clone()),
                         replicas: secondaries.clone(),
                     },
                 )
@@ -189,10 +189,17 @@ impl MetadataServerExternal {
                             anyhow::anyhow!("Chunk {} missing from metadata", chunk_id)
                         })?;
 
+                    let Some(chunk_primary) = chunk.primary else {
+                        return Err(anyhow::anyhow!(
+                            "Chunk {} hasn't elected primary server",
+                            chunk_id
+                        ));
+                    };
+
                     Self::resolve_chunk_locations(
                         active_chunkservers,
                         chunk_id,
-                        chunk.primary,
+                        chunk_primary,
                         chunk.replicas,
                     )
                     .await
