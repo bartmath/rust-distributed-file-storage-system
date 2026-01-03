@@ -33,7 +33,6 @@ mod internal;
 mod setup;
 mod types;
 
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     rustls::crypto::ring::default_provider()

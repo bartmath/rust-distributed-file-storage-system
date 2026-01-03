@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use storage_core::common::config::FINAL_STORAGE_ROOT;
 use storage_core::common::{
-    ChunkTransfer, ClientMessage, DownloadChunkRequestPayload, DownloadChunkResponsePayload,
-    Message, RequestStatusPayload, UploadChunkPayload,
+    ChunkTransfer, DownloadChunkRequestPayload, DownloadChunkResponsePayload, Message,
+    MessagePayload, RequestStatusPayload, UploadChunkPayload,
 };
 use tokio::{fs, join};
 
@@ -61,7 +61,7 @@ impl ChunkserverExternal {
             // File was already uploaded
             let _ = join!(
                 fs::remove_file(&payload.chunk_transfer.data),
-                ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest).send(send)
+                RequestStatusPayload::InvalidRequest.send_payload(send)
             );
 
             return Ok(());
@@ -72,11 +72,9 @@ impl ChunkserverExternal {
             .expect("Final storage path not initialized via config")
             .join(payload.chunk_id.to_string());
 
-        fs::rename(&payload.chunk_transfer.data, &chunk_final_path).await?;
+        fs::rename(&payload.chunk_transfer.commit(), &chunk_final_path).await?;
 
-        ClientMessage::RequestStatus(RequestStatusPayload::Ok)
-            .send(send)
-            .await?;
+        RequestStatusPayload::Ok.send_payload(send).await?;
 
         Ok(())
     }
@@ -93,8 +91,8 @@ impl ChunkserverExternal {
 
         let Some(chunk_size) = chunk_size else {
             // Chunk doesn't exist
-            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
-                .send(send)
+            let _ = RequestStatusPayload::InvalidRequest
+                .send_payload(send)
                 .await;
 
             return Ok(());
@@ -105,15 +103,12 @@ impl ChunkserverExternal {
             .expect("Final storage path not initialized via config")
             .join(payload.chunk_id.to_string());
 
-        ClientMessage::DownloadChunkResponse(DownloadChunkResponsePayload {
+        DownloadChunkResponsePayload {
             chunk_id: payload.chunk_id,
             chunk_size,
-            chunk_transfer: ChunkTransfer {
-                offset: None,
-                data: chunk_path,
-            },
-        })
-        .send(send)
+            chunk_transfer: ChunkTransfer::new(None, chunk_path),
+        }
+        .send_payload(send)
         .await?;
 
         Ok(())

@@ -8,11 +8,11 @@ use futures::{StreamExt, TryStreamExt, stream};
 use quinn::{Endpoint, SendStream};
 use std::sync::Arc;
 use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_SPAWNED_TASKS};
-use storage_core::common::types::ChunkLocations;
+use storage_core::common::types::{ChunkLocations, ChunkserverLocation};
 use storage_core::common::{
-    ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkserverLocation,
-    ClientMessage, GetClientFolderStructureRequestPayload, GetFilePlacementRequestPayload,
-    GetFilePlacementResponsePayload, Message, RequestStatusPayload,
+    ChunkPlacementRequestPayload, ChunkPlacementResponsePayload,
+    GetClientFolderStructureRequestPayload, GetFilePlacementRequestPayload,
+    GetFilePlacementResponsePayload, Message, MessagePayload, RequestStatusPayload,
     UpdateClientFolderStructurePayload,
 };
 use uuid::Uuid;
@@ -60,6 +60,7 @@ impl MetadataServerExternal {
                     .await
                     .map(|server_entry| ChunkserverLocation {
                         chunk_id: s_id,
+                        chunkserver_id: s_id,
                         server_location: server_entry.get().external_address,
                         server_hostname: server_entry.get().hostname.clone(),
                     })
@@ -103,8 +104,8 @@ impl MetadataServerExternal {
         {
             // Prevent from creating the same file again (TODO: for given user).
 
-            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
-                .send(send)
+            let _ = RequestStatusPayload::InvalidRequest
+                .send_payload(send)
                 .await;
             return Ok(());
         }
@@ -148,10 +149,10 @@ impl MetadataServerExternal {
             .try_collect()
             .await?;
 
-        ClientMessage::ChunkPlacementResponse(ChunkPlacementResponsePayload {
+        ChunkPlacementResponsePayload {
             selected_chunkservers,
-        })
-        .send(send)
+        }
+        .send_payload(send)
         .await?;
 
         Ok(())
@@ -167,8 +168,8 @@ impl MetadataServerExternal {
             .read_async(&payload.filename, |_, file| file.chunks.clone())
             .await
         else {
-            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
-                .send(send)
+            let _ = RequestStatusPayload::InvalidRequest
+                .send_payload(send)
                 .await;
             return Ok(());
         };
@@ -208,11 +209,9 @@ impl MetadataServerExternal {
             .try_collect::<Vec<_>>()
             .await?;
 
-        ClientMessage::GetFilePlacementResponse(GetFilePlacementResponsePayload {
-            chunks_locations,
-        })
-        .send(send)
-        .await?;
+        GetFilePlacementResponsePayload { chunks_locations }
+            .send_payload(send)
+            .await?;
 
         Ok(())
     }

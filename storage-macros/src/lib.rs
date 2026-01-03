@@ -66,7 +66,7 @@ pub fn derive_message_payload_enum(input: TokenStream) -> TokenStream {
                 match variant_id {
                     #(
                         #variant_idxs => {
-                            let payload = <#payload_types as crate::common::messages::payload::MessagePayload>::recv_payload(recv).await?;
+                            let payload = <#payload_types as crate::common::messages::payload::MessagePayload>::recv_payload(recv, &()).await?;
                             ::anyhow::Ok(#name::#variant_names(payload))
                         }
                     )*

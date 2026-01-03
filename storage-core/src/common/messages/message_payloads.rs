@@ -1,42 +1,19 @@
+use crate::common::config::TMP_STORAGE_ROOT;
 use crate::common::messages::chunk_transfer::ChunkTransfer;
-use crate::common::messages::payload::MessagePayload;
+use crate::common::messages::payload::{
+    ChunkPayload, SerializablePayload, impl_serializable_payload,
+};
 use crate::common::types::{ChunkLocations, Hostname};
+use async_trait::async_trait;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::fs::File;
+use tokio::io::BufWriter;
 use uuid::Uuid;
 
 type ChunkId = Uuid;
 type RackId = String;
-
-macro_rules! impl_chunk_payload {
-    ($type:ty) => {
-        impl MessagePayload for $type {
-            async fn send_payload(&self, send: &mut SendStream) -> anyhow::Result<()> {
-                let metadata_bytes = bincode::serialize(&self)?;
-                send.write_u32(metadata_bytes.len() as u32).await?;
-                send.write_all(&metadata_bytes).await?;
-
-                self.chunk_transfer.send_chunk(self.chunk_size, send).await
-            }
-
-            async fn recv_payload(recv: &mut RecvStream) -> anyhow::Result<Self> {
-                let len = recv.read_u32().await?;
-
-                let mut buffer = vec![0u8; len as usize];
-                recv.read_exact(&mut buffer).await?;
-                let mut payload: Self = bincode::deserialize(&buffer)?;
-
-                let chunk_transfer =
-                    ChunkTransfer::recv_chunk(payload.chunk_id, payload.chunk_size, recv).await?;
-                payload.chunk_transfer = chunk_transfer;
-
-                Ok(payload)
-            }
-        }
-    };
-}
 
 /// Sent by Chunkserver to MetadataServer as first message (or after reconnection with the MetadataServer).
 /// Contains introduction of the chunkserver, with data that make it identifiable
@@ -50,7 +27,7 @@ pub struct ChunkServerDiscoverPayload {
     pub external_address: SocketAddr,
     pub stored_chunks: Vec<ChunkId>, // we will probably need to send also some other info about the chunk, not only the id
 }
-impl MessagePayload for ChunkServerDiscoverPayload {}
+impl_serializable_payload!(ChunkServerDiscoverPayload);
 
 /// Sent from MetadataServer to Chunkserver as a response to ChunkServerDiscoverPayload.
 /// Contains new id of the Chunkserver which has been assigned by MetadataServer.
@@ -58,7 +35,7 @@ impl MessagePayload for ChunkServerDiscoverPayload {}
 pub struct AcceptNewChunkServerPayload {
     pub chunkserver_new_id: Uuid,
 }
-impl MessagePayload for AcceptNewChunkServerPayload {}
+impl_serializable_payload!(AcceptNewChunkServerPayload);
 
 /// Sent regularly by ChunkServer to MetadataServer.
 /// Contains all data and statistics required by MetadataServer
@@ -71,7 +48,7 @@ pub struct HeartbeatPayload {
     /// Available space on the chunkserver's disk in bytes.
     pub available_space: u64,
 }
-impl MessagePayload for HeartbeatPayload {}
+impl_serializable_payload!(HeartbeatPayload);
 
 /// Sent by Client to MetadataServer.
 /// Sends some data about the file to upload so that MetadataServer may decide
@@ -81,7 +58,7 @@ pub struct ChunkPlacementRequestPayload {
     pub filename: String,
     pub file_size: usize,
 }
-impl MessagePayload for ChunkPlacementRequestPayload {}
+impl_serializable_payload!(ChunkPlacementRequestPayload);
 
 /// Sent by MetadataServer to Client as a response to UploadChunkServersRequestPayload.
 /// Contains list of Chunkservers (with their addresses) where the chunks have to be stored.
@@ -89,7 +66,7 @@ impl MessagePayload for ChunkPlacementRequestPayload {}
 pub struct ChunkPlacementResponsePayload {
     pub selected_chunkservers: Vec<ChunkLocations>,
 }
-impl MessagePayload for ChunkPlacementResponsePayload {}
+impl_serializable_payload!(ChunkPlacementResponsePayload);
 
 /// Sent from Client to Chunkserver.
 /// Contains a Chunk to be stored on the Chunkserver.
@@ -100,7 +77,37 @@ pub struct UploadChunkPayload {
     #[serde(skip)]
     pub chunk_transfer: ChunkTransfer,
 }
-impl_chunk_payload!(UploadChunkPayload);
+#[async_trait]
+impl ChunkPayload for UploadChunkPayload {
+    type Ctx = ();
+
+    async fn send_chunk(&self, send: &mut SendStream) -> anyhow::Result<()> {
+        self.chunk_transfer.send_chunk(self.chunk_size, send).await
+    }
+
+    // Performed by chunkserver
+    async fn recv_chunk(&mut self, recv: &mut RecvStream, _ctx: &()) -> anyhow::Result<()> {
+        let path = TMP_STORAGE_ROOT
+            .get()
+            .expect("Temporary storage not initialized via config")
+            .join(self.chunk_id.to_string());
+
+        // We create the chunk_transfer before creating the file itself, to always drop it in case of any error.
+        self.chunk_transfer = ChunkTransfer::new(None, path.clone());
+
+        let file = File::create(&path).await?;
+        file.set_len(self.chunk_size).await?;
+        let mut writer = BufWriter::with_capacity(self.chunk_size as usize, file);
+
+        self.chunk_transfer
+            .recv_chunk(self.chunk_size, &mut writer, recv)
+            .await?;
+
+        writer.into_inner().sync_all().await?;
+
+        Ok(())
+    }
+}
 
 /// Sent from Client to MetadataServer.
 /// Contains the file id, which Client wants to download.
@@ -108,7 +115,7 @@ impl_chunk_payload!(UploadChunkPayload);
 pub struct GetFilePlacementRequestPayload {
     pub filename: String,
 }
-impl MessagePayload for GetFilePlacementRequestPayload {}
+impl_serializable_payload!(GetFilePlacementRequestPayload);
 
 /// Sent from MetadataServer to Client as a response to DownloadChunkserversRequestPayload.
 /// Contains list of Chunkservers (with their addresses) which store file's chunks.
@@ -116,7 +123,7 @@ impl MessagePayload for GetFilePlacementRequestPayload {}
 pub struct GetFilePlacementResponsePayload {
     pub chunks_locations: Vec<ChunkLocations>,
 }
-impl MessagePayload for GetFilePlacementResponsePayload {}
+impl_serializable_payload!(GetFilePlacementResponsePayload);
 
 /// Sent from Client to ChunkServer.
 /// Contains list of chunk ids which it wants to download from the ChunkServer.
@@ -124,7 +131,7 @@ impl MessagePayload for GetFilePlacementResponsePayload {}
 pub struct DownloadChunkRequestPayload {
     pub chunk_id: ChunkId,
 }
-impl MessagePayload for DownloadChunkRequestPayload {}
+impl_serializable_payload!(DownloadChunkRequestPayload);
 
 /// Sent from Chunkserver to Client as a response to GetChunksRequestPayload.
 /// Contains chunk which have been requested by Client.
@@ -135,7 +142,30 @@ pub struct DownloadChunkResponsePayload {
     #[serde(skip)]
     pub chunk_transfer: ChunkTransfer,
 }
-impl_chunk_payload!(DownloadChunkResponsePayload);
+#[async_trait]
+impl ChunkPayload for DownloadChunkResponsePayload {
+    type Ctx = (File, u64);
+
+    async fn send_chunk(&self, send: &mut SendStream) -> anyhow::Result<()> {
+        self.chunk_transfer.send_chunk(self.chunk_size, send).await
+    }
+
+    async fn recv_chunk(&mut self, recv: &mut RecvStream, _ctx: &Self::Ctx) -> anyhow::Result<()> {
+        // We create the chunk_transfer before creating the file itself, to always drop it in case of any error.
+        self.chunk_transfer = ChunkTransfer::new(None, path.clone());
+
+        file.set_len(self.chunk_size).await?;
+        let mut writer = BufWriter::with_capacity(self.chunk_size as usize, file);
+
+        self.chunk_transfer
+            .recv_chunk(self.chunk_size, &mut writer, recv)
+            .await?;
+
+        writer.into_inner().sync_all().await?;
+
+        Ok(())
+    }
+}
 
 /// Sent from any server to a client when no other response would be sent.
 #[derive(Serialize, Deserialize, Debug)]
@@ -144,22 +174,22 @@ pub enum RequestStatusPayload {
     InvalidRequest,
     InternalServerError,
 }
-impl MessagePayload for RequestStatusPayload {}
+impl_serializable_payload!(RequestStatusPayload);
 
 /// Sent (with/once after logging) from client to MetadataServer
 /// (for now, we could offload it to a separate server)
 /// to get client's folder structure.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetClientFolderStructureRequestPayload {}
-impl MessagePayload for GetClientFolderStructureRequestPayload {}
+impl_serializable_payload!(GetClientFolderStructureRequestPayload);
 
 /// Sent from MetadataServer to Client as a response to GetClientFolderStructureRequestPayload.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetClientFolderStructureResponsePayload {}
-impl MessagePayload for GetClientFolderStructureResponsePayload {}
+impl_serializable_payload!(GetClientFolderStructureResponsePayload);
 
 /// Sent at the end of the client session (and once every some interval e.g. 10mins)
 /// to MetadataServer with any updates to client's folder structure.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateClientFolderStructurePayload {}
-impl MessagePayload for UpdateClientFolderStructurePayload {}
+impl_serializable_payload!(UpdateClientFolderStructurePayload);

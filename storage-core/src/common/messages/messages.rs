@@ -36,13 +36,3 @@ pub enum ChunkserverExternalMessage {
 pub enum ChunkserverInternalMessage {
     AcceptNewChunkserver(AcceptNewChunkServerPayload),
 }
-
-// TODO probably not needed since it's client who initiates a connection
-#[derive(Debug, Serialize, Deserialize, Message)]
-pub enum ClientMessage {
-    ChunkPlacementResponse(ChunkPlacementResponsePayload),
-    GetFilePlacementResponse(GetFilePlacementResponsePayload),
-    DownloadChunkResponse(DownloadChunkResponsePayload),
-    RequestStatus(RequestStatusPayload),
-    GetClientFolderStructureResponse(GetClientFolderStructureResponsePayload),
-}
