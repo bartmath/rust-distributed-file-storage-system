@@ -6,6 +6,7 @@ use clap::Parser;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
+pub mod chunk_send;
 mod client;
 mod commands;
 mod config;

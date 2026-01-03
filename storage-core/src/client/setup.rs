@@ -37,7 +37,9 @@ pub(super) fn setup(options: ClientOpt) -> anyhow::Result<Client> {
     let mut endpoint = quinn::Endpoint::client(options.socket_addr)?;
     endpoint.set_default_client_config(client_config);
 
-    let client = Client::new();
+    let endpoint = Arc::new(endpoint);
+
+    let client = Client::new(endpoint);
 
     Ok(client)
 }

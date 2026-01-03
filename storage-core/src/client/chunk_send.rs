@@ -1,16 +1,20 @@
-use crate::common::UploadChunkPayload;
-use crate::common::messages::chunk_transfer::ChunkTransfer;
-use crate::common::messages::messages::{ChunkserverExternalMessage, Message};
-use crate::common::types::{ChunkId, Hostname, ServerConnections, ServerLocation};
+use crate::types::{ChunkId, ChunkserverId, Hostname};
+use moka::future::Cache;
 use quinn::{Connection, Endpoint};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::path::PathBuf;
+use storage_core::common::ChunkTransfer;
+use storage_core::common::UploadChunkPayload;
+use storage_core::common::messages::messages::{ChunkserverExternalMessage, Message};
 use uuid::Uuid;
+
+type ChunkserverConnections = Cache<ChunkserverId, Connection>;
 
 #[derive(Debug)]
 pub struct SendChunkMetadata {
     chunk_id: ChunkId,
-    server_location: ServerLocation,
+    server_location: SocketAddr,
     server_hostname: Hostname,
     offset: u64,
     chunk_size: u64,
@@ -20,10 +24,10 @@ pub struct SendChunkMetadata {
 impl SendChunkMetadata {
     async fn send(
         self,
-        endpoint: Endpoint,
-        connections: ServerConnections,
+        _endpoint: Endpoint,
+        _connections: ChunkserverConnections,
     ) -> anyhow::Result<ChunkId> {
-        let conn = connections
+        /* let conn = connections
             .try_get_with(self.server_location, async {
                 self.connect_to_server(&endpoint).await
             })
@@ -43,7 +47,9 @@ impl SendChunkMetadata {
             return self.send_chunk(new_conn).await;
         }
 
-        self.send_chunk(conn).await
+        self.send_chunk(conn).await */
+
+        Ok(Uuid::new_v4())
     }
 
     async fn connect_to_server(&self, endpoint: &Endpoint) -> anyhow::Result<Connection> {
@@ -56,10 +62,7 @@ impl SendChunkMetadata {
         let payload = UploadChunkPayload {
             chunk_id: self.chunk_id,
             chunk_size: self.chunk_size,
-            chunk_transfer: ChunkTransfer {
-                offset: Some(self.offset),
-                data: self.file_path,
-            },
+            chunk_transfer: ChunkTransfer::new(Some(self.offset), self.file_path),
         };
 
         let message = ChunkserverExternalMessage::UploadChunk(payload);
@@ -75,12 +78,12 @@ impl SendChunkMetadata {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChunkserverLocation {
     pub chunk_id: ChunkId,
-    pub server_location: ServerLocation,
+    pub server_location: SocketAddr,
     pub server_hostname: Hostname,
 }
 
 impl ChunkserverLocation {
-    pub fn new(server_location: ServerLocation, server_hostname: Hostname) -> Self {
+    pub fn new(server_location: SocketAddr, server_hostname: Hostname) -> Self {
         ChunkserverLocation {
             chunk_id: Uuid::new_v4(),
             server_location,

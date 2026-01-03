@@ -6,7 +6,7 @@ use storage_core::common::MetadataServerExternalMessage::{
     UpdateClientFolderStructure,
 };
 use storage_core::common::{
-    ClientMessage, Message, MetadataServerExternalMessage, QuicServer, RequestStatusPayload,
+    Message, MessagePayload, MetadataServerExternalMessage, QuicServer, RequestStatusPayload,
 };
 
 #[async_trait]
@@ -36,8 +36,8 @@ impl QuicServer for MetadataServerExternal {
         };
 
         if res.is_err() {
-            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InternalServerError)
-                .send(&mut send)
+            let _ = RequestStatusPayload::InternalServerError
+                .send_payload(&mut send)
                 .await;
         }
 

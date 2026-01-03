@@ -3,8 +3,9 @@ use async_trait::async_trait;
 use quinn::{Endpoint, RecvStream, SendStream};
 use std::sync::atomic::Ordering;
 use storage_core::common::ChunkserverExternalMessage::{DownloadChunkRequest, UploadChunk};
-use storage_core::common::ClientMessage::RequestStatus;
-use storage_core::common::{ChunkserverExternalMessage, Message, QuicServer, RequestStatusPayload};
+use storage_core::common::{
+    ChunkserverExternalMessage, Message, MessagePayload, QuicServer, RequestStatusPayload,
+};
 
 #[async_trait]
 impl QuicServer for ChunkserverExternal {
@@ -30,8 +31,8 @@ impl QuicServer for ChunkserverExternal {
         };
 
         if res.is_err() {
-            let _ = RequestStatus(RequestStatusPayload::InternalServerError)
-                .send(&mut send)
+            let _ = RequestStatusPayload::InternalServerError
+                .send_payload(&mut send)
                 .await;
         }
 
