@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::BufWriter;
 use uuid::Uuid;
@@ -87,23 +88,8 @@ impl ChunkPayload for UploadChunkPayload {
 
     // Performed by chunkserver
     async fn recv_chunk(&mut self, recv: &mut RecvStream, _ctx: &()) -> anyhow::Result<()> {
-        let path = TMP_STORAGE_ROOT
-            .get()
-            .expect("Temporary storage not initialized via config")
-            .join(self.chunk_id.to_string());
-
-        // We create the chunk_transfer before creating the file itself, to always drop it in case of any error.
-        self.chunk_transfer = ChunkTransfer::new(None, path.clone());
-
-        let file = File::create(&path).await?;
-        file.set_len(self.chunk_size).await?;
-        let mut writer = BufWriter::with_capacity(self.chunk_size as usize, file);
-
-        self.chunk_transfer
-            .recv_chunk(self.chunk_size, &mut writer, recv)
-            .await?;
-
-        writer.into_inner().sync_all().await?;
+        self.chunk_transfer =
+            ChunkTransfer::recv_chunk_server(self.chunk_id, self.chunk_size, recv).await?;
 
         Ok(())
     }
@@ -144,24 +130,18 @@ pub struct DownloadChunkResponsePayload {
 }
 #[async_trait]
 impl ChunkPayload for DownloadChunkResponsePayload {
-    type Ctx = (File, u64);
+    type Ctx = (PathBuf, u64);
 
     async fn send_chunk(&self, send: &mut SendStream) -> anyhow::Result<()> {
         self.chunk_transfer.send_chunk(self.chunk_size, send).await
     }
 
     async fn recv_chunk(&mut self, recv: &mut RecvStream, _ctx: &Self::Ctx) -> anyhow::Result<()> {
-        // We create the chunk_transfer before creating the file itself, to always drop it in case of any error.
-        self.chunk_transfer = ChunkTransfer::new(None, path.clone());
+        let (data_path, offset) = _ctx;
 
-        file.set_len(self.chunk_size).await?;
-        let mut writer = BufWriter::with_capacity(self.chunk_size as usize, file);
-
-        self.chunk_transfer
-            .recv_chunk(self.chunk_size, &mut writer, recv)
-            .await?;
-
-        writer.into_inner().sync_all().await?;
+        self.chunk_transfer =
+            ChunkTransfer::recv_chunk_client(*offset, data_path.clone(), self.chunk_size, recv)
+                .await?;
 
         Ok(())
     }

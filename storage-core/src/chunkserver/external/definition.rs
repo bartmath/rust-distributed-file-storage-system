@@ -60,7 +60,7 @@ impl ChunkserverExternal {
         {
             // File was already uploaded
             let _ = join!(
-                fs::remove_file(&payload.chunk_transfer.data),
+                fs::remove_file(&payload.chunk_transfer.data_path),
                 RequestStatusPayload::InvalidRequest.send_payload(send)
             );
 
