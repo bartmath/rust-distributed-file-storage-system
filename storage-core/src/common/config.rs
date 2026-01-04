@@ -10,4 +10,4 @@ pub const N_CHUNK_REPLICAS: usize = 1; // TODO: for easier testing changed to 1,
 pub const MAX_SPAWNED_TASKS: usize = 16;
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 pub const HEARTBEAT_MARGIN: Duration = Duration::from_secs(10);
-pub const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+pub const MAX_CLIENT_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);

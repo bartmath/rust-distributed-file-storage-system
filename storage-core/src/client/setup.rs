@@ -1,11 +1,13 @@
 use crate::client::Client;
 use crate::config::ClientOpt;
 use anyhow::Context;
+use quinn::IdleTimeout;
 use quinn::crypto::rustls::QuicClientConfig;
 use rustls::pki_types::CertificateDer;
 use rustls_platform_verifier::BuilderVerifierExt;
 use std::sync::Arc;
 use storage_core::common::ALPN_QUIC_HTTP;
+use storage_core::common::config::MAX_CLIENT_IDLE_TIMEOUT;
 
 pub(super) fn setup(options: ClientOpt) -> anyhow::Result<Client> {
     let mut client_crypto = rustls::ClientConfig::builder()
@@ -41,8 +43,12 @@ pub(super) fn setup(options: ClientOpt) -> anyhow::Result<Client> {
 
     client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-    let client_config =
+    let mut transport = quinn::TransportConfig::default();
+    transport.max_idle_timeout(Some(IdleTimeout::try_from(MAX_CLIENT_IDLE_TIMEOUT)?));
+    let mut client_config =
         quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto)?));
+    client_config.transport_config(Arc::new(transport));
+
     let mut endpoint = quinn::Endpoint::client(options.socket_addr)?;
     endpoint.set_default_client_config(client_config);
 
