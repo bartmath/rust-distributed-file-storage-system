@@ -60,10 +60,9 @@ impl MetadataServerExternal {
                     .get_async(&s_id)
                     .await
                     .map(|server_entry| ChunkserverLocation {
-                        chunk_id: s_id,
-                        chunkserver_id: s_id,
-                        server_location: server_entry.get().external_address,
-                        server_hostname: server_entry.get().hostname.clone(),
+                        id: s_id,
+                        addr: server_entry.get().external_address,
+                        hostname: server_entry.get().hostname.clone(),
                     })
             }
         };
@@ -162,7 +161,7 @@ impl MetadataServerExternal {
         if selected_chunkservers.len() > 0 {
             dbg_println!(
                 "Primary placement for file's first chunks is {}",
-                selected_chunkservers[0].primary.chunkserver_id
+                selected_chunkservers[0].primary.id
             );
         }
 

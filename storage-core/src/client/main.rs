@@ -46,9 +46,6 @@ async fn run(client: Client) -> anyhow::Result<()> {
                     }
                 };
 
-                // let mut full_args = vec!["client-cli".to_string()];
-                // full_args.extend(args);
-
                 match Cli::try_parse_from(args) {
                     Ok(cli) => {
                         client.handle_command(cli.command).await.expect("Err");

@@ -9,10 +9,9 @@ pub(crate) type ChunkserverId = Uuid;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChunkserverLocation {
-    pub chunk_id: ChunkId,
-    pub chunkserver_id: ChunkserverId,
-    pub server_location: SocketAddr,
-    pub server_hostname: Hostname,
+    pub id: ChunkserverId,
+    pub addr: SocketAddr,
+    pub hostname: Hostname,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

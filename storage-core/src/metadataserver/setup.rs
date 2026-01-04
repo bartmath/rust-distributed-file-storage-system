@@ -6,9 +6,7 @@ use quinn::crypto::rustls::QuicServerConfig;
 use quinn::{Endpoint, IdleTimeout};
 use std::sync::Arc;
 use storage_core::common;
-use storage_core::common::config::{
-    HEARTBEAT_INTERVAL, HEARTBEAT_MARGIN, MAX_CLIENT_IDLE_TIMEOUT,
-};
+use storage_core::common::config::{HEARTBEAT_INTERVAL, HEARTBEAT_MARGIN, MAX_CLIENT_IDLE_TIMEOUT};
 
 pub(crate) fn metadata_server_setup(
     options: MetadataServerOpt,

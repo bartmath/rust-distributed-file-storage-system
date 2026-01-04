@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use storage_core::common;
 use storage_core::common::config::{
-    FINAL_STORAGE_ROOT, HEARTBEAT_INTERVAL, HEARTBEAT_MARGIN,
-    MAX_CLIENT_IDLE_TIMEOUT, TMP_STORAGE_ROOT,
+    FINAL_STORAGE_ROOT, HEARTBEAT_INTERVAL, HEARTBEAT_MARGIN, MAX_CLIENT_IDLE_TIMEOUT,
+    TMP_STORAGE_ROOT,
 };
 
 pub(crate) fn chunkserver_setup(

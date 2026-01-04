@@ -1,11 +1,14 @@
 use crate::commands::CliCommand;
-use crate::types::Hostname;
+use crate::types::{ChunkserverId, Hostname};
 use arc_swap::ArcSwapOption;
-use quinn::{Connection, Endpoint};
+use moka::future::Cache;
+use quinn::{Connection, Endpoint, RecvStream, SendStream};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use storage_core::common::config::MAX_CHUNK_SIZE;
+use std::time::Duration;
+use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_CLIENT_IDLE_TIMEOUT};
+use storage_core::common::types::ChunkserverLocation;
 use storage_core::common::{
     ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkTransfer,
     ChunkserverExternalMessage, DownloadChunkRequestPayload, DownloadChunkResponsePayload,
@@ -14,7 +17,6 @@ use storage_core::common::{
     MetadataServerExternalMessage, RequestStatusPayload, UpdateClientFolderStructurePayload,
     UploadChunkPayload,
 };
-use storage_core::dbg_println;
 use tokio::fs::File;
 
 pub(super) struct Client {
@@ -24,6 +26,8 @@ pub(super) struct Client {
     endpoint: Arc<Endpoint>,
 
     metadata_server_connection: Arc<ArcSwapOption<Connection>>,
+
+    chunkserver_connections: Cache<ChunkserverId, Arc<Connection>>,
 }
 
 impl Client {
@@ -37,6 +41,10 @@ impl Client {
             metadata_server_hostname,
             endpoint: Arc::new(endpoint),
             metadata_server_connection: Arc::default(),
+            chunkserver_connections: Cache::builder()
+                .max_capacity(100)
+                .time_to_live(MAX_CLIENT_IDLE_TIMEOUT)
+                .build(),
         }
     }
     pub(super) async fn handle_command(&self, cmd: CliCommand) -> anyhow::Result<()> {
@@ -97,6 +105,31 @@ impl Client {
         Ok(())
     }
 
+    async fn get_chunkserver_stream(
+        &self,
+        chunkserver_location: ChunkserverLocation,
+    ) -> anyhow::Result<(SendStream, RecvStream)> {
+        // Opens streams on either existing connection or on newly created connection
+        // (lambda is run if the connection wasn't in Cache).
+        self.chunkserver_connections
+            .try_get_with::<_, anyhow::Error>(chunkserver_location.id, async {
+                let conn = Arc::new(
+                    self.endpoint
+                        .connect(chunkserver_location.addr, &*chunkserver_location.hostname)?
+                        .await?,
+                );
+                self.chunkserver_connections
+                    .insert(chunkserver_location.id, conn.clone())
+                    .await;
+                Ok(conn)
+            })
+            .await
+            .map_err(|_| anyhow::anyhow!("Cache error"))?
+            .open_bi()
+            .await
+            .map_err(|_| anyhow::anyhow!("Cache error"))
+    }
+
     async fn upload_file(&self, path: PathBuf) -> anyhow::Result<()> {
         if !path.exists() {
             return Err(anyhow::anyhow!("File does not exist: {:?}", path));
@@ -123,31 +156,15 @@ impl Client {
 
         let res = ChunkPlacementResponsePayload::recv_payload(&mut recv, &()).await?;
 
-        dbg_println!(
-            "Received response for {} chunks",
-            res.selected_chunkservers.len()
-        );
-
         // Upload chunks to chunkservers
         let mut offset = 0u64;
 
         for chunk_location in res.selected_chunkservers {
             let current_chunk_size = std::cmp::min(file_size - offset, MAX_CHUNK_SIZE as u64);
 
-            dbg_println!(
-                "Connecting to chunkserver {} {}",
-                chunk_location.primary.chunkserver_id,
-                chunk_location.primary.server_hostname
-            );
-
-            let cs_conn = self
-                .endpoint
-                .connect(
-                    chunk_location.primary.server_location,
-                    &*chunk_location.primary.server_hostname,
-                )?
+            let (mut cs_send, _cs_recv) = self
+                .get_chunkserver_stream(chunk_location.primary.clone())
                 .await?;
-            let (mut cs_send, _cs_recv) = cs_conn.open_bi().await?;
 
             let chunk_transfer = ChunkTransfer::new(Some(offset), path.clone(), false);
 
@@ -184,20 +201,14 @@ impl Client {
         // Prepare destination file (create empty)
         // It will be opened in Write mode and seeked.
         let full_destination = destination.join(file_name);
-        dbg_println!("Download destination path {}", full_destination.display());
         File::create(full_destination.clone()).await?;
 
         let mut offset = 0u64;
 
         for chunk_location in res.chunks_locations {
-            let cs_conn = self
-                .endpoint
-                .connect(
-                    chunk_location.primary.server_location,
-                    &*chunk_location.primary.server_hostname,
-                )?
+            let (mut cs_send, mut cs_recv) = self
+                .get_chunkserver_stream(chunk_location.primary.clone())
                 .await?;
-            let (mut cs_send, mut cs_recv) = cs_conn.open_bi().await?;
 
             ChunkserverExternalMessage::DownloadChunkRequest(DownloadChunkRequestPayload {
                 chunk_id: chunk_location.chunk_id,
