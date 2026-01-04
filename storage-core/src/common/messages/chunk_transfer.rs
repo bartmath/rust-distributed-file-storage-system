@@ -1,5 +1,6 @@
 use crate::common::config::TMP_STORAGE_ROOT;
 use crate::common::types::ChunkId;
+use crate::dbg_println;
 use quinn::{RecvStream, SendStream};
 use std::path::PathBuf;
 use tokio::fs::{File, OpenOptions};
@@ -53,6 +54,8 @@ impl ChunkTransfer {
         chunk_size: u64,
         recv: &mut RecvStream,
     ) -> anyhow::Result<Self> {
+        dbg_println!("Recv chunk {} from server", chunk_id);
+
         let data_path = TMP_STORAGE_ROOT
             .get()
             .expect("Temporary storage not initialized via config")
@@ -70,6 +73,8 @@ impl ChunkTransfer {
 
         writer.into_inner().sync_all().await?;
 
+        dbg_println!("Wrote chunk {} to server", chunk_id);
+
         Ok(chunk_transfer)
     }
 
@@ -79,6 +84,8 @@ impl ChunkTransfer {
         chunk_size: u64,
         recv: &mut RecvStream,
     ) -> anyhow::Result<Self> {
+        dbg_println!("Recv on client file off: {}, size: {}", offset, chunk_size);
+
         let mut file = OpenOptions::new().write(true).open(&data_path).await?;
 
         let chunk_transfer = ChunkTransfer::new(Some(offset), data_path, false);
@@ -96,7 +103,7 @@ impl ChunkTransfer {
 
 impl Drop for ChunkTransfer {
     fn drop(&mut self) {
-        if self.data_path.exists() {
+        if self.delete_on_error && self.data_path.exists() {
             let _ = std::fs::remove_file(&self.data_path);
         }
     }

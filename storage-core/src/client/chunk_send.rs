@@ -62,7 +62,7 @@ impl SendChunkMetadata {
         let payload = UploadChunkPayload {
             chunk_id: self.chunk_id,
             chunk_size: self.chunk_size,
-            chunk_transfer: ChunkTransfer::new(Some(self.offset), self.file_path),
+            chunk_transfer: ChunkTransfer::new(Some(self.offset), self.file_path, false),
         };
 
         let message = ChunkserverExternalMessage::UploadChunk(payload);

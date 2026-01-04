@@ -46,14 +46,15 @@ async fn run(client: Client) -> anyhow::Result<()> {
                     }
                 };
 
-                let mut full_args = vec!["client-cli".to_string()];
-                full_args.extend(args);
+                // let mut full_args = vec!["client-cli".to_string()];
+                // full_args.extend(args);
 
-                match Cli::try_parse_from(full_args) {
+                match Cli::try_parse_from(args) {
                     Ok(cli) => {
-                        if let Err(e) = client.handle_command(cli.command).await {
-                            println!("Command failed: {}", e);
-                        }
+                        client.handle_command(cli.command).await.expect("Err");
+                        //if let Err(e) = client.handle_command(cli.command).await {
+                        //    println!("Command failed: {}", e);
+                        //}
                     }
                     Err(e) => {
                         // Print Clap's error/help message

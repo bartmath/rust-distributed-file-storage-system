@@ -5,9 +5,10 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use storage_core::common::config::FINAL_STORAGE_ROOT;
 use storage_core::common::{
-    ChunkTransfer, DownloadChunkRequestPayload, DownloadChunkResponsePayload, Message,
-    MessagePayload, RequestStatusPayload, UploadChunkPayload,
+    ChunkTransfer, DownloadChunkRequestPayload, DownloadChunkResponsePayload, MessagePayload,
+    RequestStatusPayload, UploadChunkPayload,
 };
+use storage_core::dbg_println;
 use tokio::{fs, join};
 
 /// 'ChunkserverExternal' is a struct used for communication with clients.
@@ -47,6 +48,8 @@ impl ChunkserverExternal {
         send: &mut SendStream,
         payload: UploadChunkPayload,
     ) -> anyhow::Result<()> {
+        dbg_println!("Chunk {} is being uploaded", payload.chunk_id);
+
         let chunk = Chunk {
             id: payload.chunk_id,
             size: payload.chunk_size,
@@ -58,9 +61,13 @@ impl ChunkserverExternal {
             .await
             .is_err()
         {
-            // File was already uploaded
+            // Chunk was already uploaded
+            dbg_println!(
+                "Deleting chunk because it was already uploaded {}",
+                payload.chunk_id
+            );
             let _ = join!(
-                fs::remove_file(&payload.chunk_transfer.data_path),
+                fs::remove_file(payload.chunk_transfer.commit()),
                 RequestStatusPayload::InvalidRequest.send_payload(send)
             );
 
@@ -72,9 +79,14 @@ impl ChunkserverExternal {
             .expect("Final storage path not initialized via config")
             .join(payload.chunk_id.to_string());
 
+        dbg_println!("Chunk {} to be renamed", payload.chunk_id);
+
         fs::rename(&payload.chunk_transfer.commit(), &chunk_final_path).await?;
 
-        RequestStatusPayload::Ok.send_payload(send).await?;
+        // RequestStatusPayload::Ok.send_payload(send).await?;
+        send.finish()?;
+
+        dbg_println!("Chunk {} is uploaded successfully", payload.chunk_id);
 
         Ok(())
     }
@@ -84,12 +96,19 @@ impl ChunkserverExternal {
         send: &mut SendStream,
         payload: DownloadChunkRequestPayload,
     ) -> anyhow::Result<()> {
+        dbg_println!("Chunk {} is downloaded", payload.chunk_id);
+
         let chunk_size = self
             .chunks
             .read_async(&payload.chunk_id, |_, chunk| chunk.size)
             .await;
 
         let Some(chunk_size) = chunk_size else {
+            dbg_println!(
+                "Chunkserver doesn't store requested chunk {}",
+                payload.chunk_id
+            );
+
             // Chunk doesn't exist
             let _ = RequestStatusPayload::InvalidRequest
                 .send_payload(send)
@@ -103,13 +122,19 @@ impl ChunkserverExternal {
             .expect("Final storage path not initialized via config")
             .join(payload.chunk_id.to_string());
 
+        dbg_println!("Chunk {} to be sent over to client", payload.chunk_id);
+
         DownloadChunkResponsePayload {
             chunk_id: payload.chunk_id,
             chunk_size,
-            chunk_transfer: ChunkTransfer::new(None, chunk_path),
+            chunk_transfer: ChunkTransfer::new(None, chunk_path, false),
         }
         .send_payload(send)
         .await?;
+
+        send.finish()?;
+
+        dbg_println!("Chunk {} was downloaded successfully", payload.chunk_id);
 
         Ok(())
     }

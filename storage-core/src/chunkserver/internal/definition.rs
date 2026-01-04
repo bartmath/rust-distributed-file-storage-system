@@ -70,8 +70,8 @@ impl ChunkserverInternal {
             internal_endpoint,
             metadata_server_addr,
             metadata_server_hostname,
-            metadata_reconnect_lock: Arc::new(Mutex::new(())),
-            metadata_server_connection: Arc::new(ArcSwap::from_pointee(None)),
+            metadata_reconnect_lock: Arc::default(),
+            metadata_server_connection: Arc::default(),
             chunkserver_connections,
         }
     }

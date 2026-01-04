@@ -1,20 +1,12 @@
-use crate::common::config::TMP_STORAGE_ROOT;
 use crate::common::messages::chunk_transfer::ChunkTransfer;
-use crate::common::messages::payload::{
-    ChunkPayload, SerializablePayload, impl_serializable_payload,
-};
-use crate::common::types::{ChunkLocations, Hostname};
+use crate::common::messages::payload::{ChunkPayload, impl_serializable_payload};
+use crate::common::types::{ChunkId, ChunkLocations, Hostname, RackId};
 use async_trait::async_trait;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use tokio::fs::File;
-use tokio::io::BufWriter;
 use uuid::Uuid;
-
-type ChunkId = Uuid;
-type RackId = String;
 
 /// Sent by Chunkserver to MetadataServer as first message (or after reconnection with the MetadataServer).
 /// Contains introduction of the chunkserver, with data that make it identifiable
@@ -165,7 +157,11 @@ impl_serializable_payload!(GetClientFolderStructureRequestPayload);
 
 /// Sent from MetadataServer to Client as a response to GetClientFolderStructureRequestPayload.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GetClientFolderStructureResponsePayload {}
+pub struct GetClientFolderStructureResponsePayload {
+    // TODO: For now we return all files (in flat folder).
+    // TODO: In future we want to return a tree-like folder structure
+    pub all_files: Vec<String>,
+}
 impl_serializable_payload!(GetClientFolderStructureResponsePayload);
 
 /// Sent at the end of the client session (and once every some interval e.g. 10mins)

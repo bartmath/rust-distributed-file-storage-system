@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use uuid::Uuid;
 
 pub(crate) type ChunkId = Uuid;
+pub(crate) type RackId = String;
 pub(crate) type Hostname = String;
 pub(crate) type ChunkserverId = Uuid;
 

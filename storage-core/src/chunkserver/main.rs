@@ -8,8 +8,10 @@
 //!     --advertised-external-addr [::1]:12345 \
 //!     --advertised-internal-addr [::1]:12346 \
 //!     --client-socket-addr [::]:12345 \
-//!     --internal-socket-addr [::]:12346
+//!     --internal-socket-addr [::]:12346 \
+//!     --tmp-root tmp1/ --final-root final1/
 //!   ```
+//! - **WARNING** when run locally, chunkservers should have pair-wise distinct address, hostnames and storage folders.
 //!
 //! # Running in Release Mode
 //! - **Command:** `cargo run --release --bin chunkserver -- [OPTIONS]`
