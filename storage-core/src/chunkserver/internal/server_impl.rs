@@ -15,7 +15,8 @@ impl QuicServer for ChunkserverInternal {
         Ok(())
     }
 
-    async fn handle_request(&self, send: SendStream, recv: RecvStream) -> anyhow::Result<()> {
+    #[allow(dead_code)]
+    async fn handle_request(&self, _send: SendStream, _recv: RecvStream) -> anyhow::Result<()> {
         todo!(
             "currently chunkserver doesn't receive any messages from other servers, \
             in future add leases messages, chunks version checks, chunks forwarding in case of an error.",

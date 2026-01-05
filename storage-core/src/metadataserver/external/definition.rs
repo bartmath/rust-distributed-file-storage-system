@@ -12,7 +12,7 @@ use storage_core::common::types::{ChunkLocations, ChunkserverLocation};
 use storage_core::common::{
     ChunkPlacementRequestPayload, ChunkPlacementResponsePayload,
     GetClientFolderStructureRequestPayload, GetFilePlacementRequestPayload,
-    GetFilePlacementResponsePayload, Message, MessagePayload, RequestStatusPayload,
+    GetFilePlacementResponsePayload, MessagePayload, RequestStatusPayload,
     UpdateClientFolderStructurePayload,
 };
 use storage_core::dbg_println;
@@ -134,7 +134,6 @@ impl MetadataServerExternal {
                 .insert_async(
                     *chunk_id,
                     ChunkMetadata {
-                        chunk_id: *chunk_id,
                         primary: Some(primary.clone()),
                         replicas: secondaries.clone(),
                     },

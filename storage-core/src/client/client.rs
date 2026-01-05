@@ -1,13 +1,15 @@
 use crate::commands::CliCommand;
 use crate::types::{ChunkId, ChunkserverId, Hostname};
 use arc_swap::ArcSwapOption;
+use futures::{StreamExt, stream};
 use moka::future::Cache;
 use quinn::{Connection, Endpoint, RecvStream, SendStream};
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
-use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_CLIENT_IDLE_TIMEOUT, N_CHUNK_REPLICAS};
+use storage_core::common::config::{
+    MAX_CHUNK_SIZE, MAX_CLIENT_IDLE_TIMEOUT, MAX_SPAWNED_TASKS, N_CHUNK_REPLICAS,
+};
 use storage_core::common::types::{ChunkLocations, ChunkserverLocation};
 use storage_core::common::{
     ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkTransfer,
@@ -166,7 +168,7 @@ impl Client {
         Ok(())
     }
 
-    async fn a_upload_file<F>(
+    async fn batch_upload_chunks<F>(
         &self,
         file_path: PathBuf,
         file_size: u64,
@@ -176,13 +178,11 @@ impl Client {
     where
         F: FnMut(ChunkLocations) -> Option<(ChunkId, ChunkserverLocation)>,
     {
-        let handles: Vec<_> = chunk_locations
-            .into_iter()
-            .enumerate()
-            .filter_map(|(id, chunk_location)| {
+        let mut upload_tasks = stream::iter(chunk_locations.into_iter().enumerate().filter_map(
+            |(id, chunk_location)| {
                 let client = self.clone();
-                let offset = (MAX_CHUNK_SIZE * id) as u64;
                 let file_path = file_path.clone();
+                let offset = (MAX_CHUNK_SIZE * id) as u64;
                 let chunk_size = std::cmp::min(file_size - offset, MAX_CHUNK_SIZE as u64);
                 let (chunk_id, chunkserver) = chunkserver_extractor(chunk_location)?;
 
@@ -191,11 +191,14 @@ impl Client {
                         .upload_chunk(offset, file_path, chunk_id, chunk_size, chunkserver)
                         .await
                 }))
-            })
-            .collect();
+            },
+        ))
+        .buffer_unordered(MAX_SPAWNED_TASKS);
 
-        // We concurrently read the file and upload its chunks
-        futures::future::try_join_all(handles).await?;
+        // Process results as they finish
+        while let Some(result) = upload_tasks.next().await {
+            result??;
+        }
 
         Ok(())
     }
@@ -228,13 +231,13 @@ impl Client {
         let chunk_locations = res.selected_chunkservers;
 
         // Upload chunks to chunkservers
-        self.a_upload_file(
+        self.batch_upload_chunks(
             file_path.clone(),
             file_size,
             chunk_locations.clone(),
             move |chunk_locs| Some((chunk_locs.chunk_id, chunk_locs.primary)),
         )
-            .await?;
+        .await?;
 
         // We upload the file's chunks to all secondary locations.
         // The closure now returns Option, because the number of secondary chunkservers
@@ -242,7 +245,7 @@ impl Client {
         // In the future, it will be chunkserver's task to replicate from the primary
         // and the client will only upload to primary chunkserver.
         for i in 0..N_CHUNK_REPLICAS {
-            self.a_upload_file(
+            self.batch_upload_chunks(
                 file_path.clone(),
                 file_size,
                 chunk_locations.clone(),
@@ -253,7 +256,7 @@ impl Client {
                         .map(|replica| (chunk_locs.chunk_id, replica.clone()))
                 },
             )
-                .await?;
+            .await?;
         }
 
         println!("Upload complete.");

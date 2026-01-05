@@ -1,4 +1,4 @@
-use crate::chunk::Chunk;
+use crate::types::Chunk;
 use crate::types::{ChunkId, ServerId};
 use quinn::{Connection, Endpoint, SendStream};
 use std::sync::Arc;
@@ -51,7 +51,6 @@ impl ChunkserverExternal {
         dbg_println!("Chunk {} is being uploaded", payload.chunk_id);
 
         let chunk = Chunk {
-            id: payload.chunk_id,
             size: payload.chunk_size,
         };
 

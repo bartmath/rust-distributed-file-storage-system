@@ -1,5 +1,4 @@
-use crate::chunk::{Chunk, ChunkId};
-use crate::types::{Hostname, RackId, ServerId};
+use crate::types::{Chunk, ChunkId, Hostname, RackId, ServerId};
 use arc_swap::ArcSwap;
 use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;

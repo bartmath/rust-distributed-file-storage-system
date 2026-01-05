@@ -28,7 +28,6 @@ use config::ChunkserverOpt;
 use setup::chunkserver_setup;
 use storage_core::common::QuicServer;
 
-mod chunk;
 mod config;
 mod external;
 mod internal;

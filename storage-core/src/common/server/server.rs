@@ -43,9 +43,11 @@ pub trait QuicServer: Send + Sync + Clone + 'static {
                 Err(e) => return Err(e.into()),
             };
 
+            // We spawn new task per stream to allow for multiple simultaneous requests
+            // e.g. many chunk upload requests from the same client.
             let (send, recv) = stream;
-            let self_clone = self.clone();
-            tokio::spawn(async move {self_clone.handle_request(send, recv).await});
+            let server = self.clone();
+            tokio::spawn(async move { server.handle_request(send, recv).await });
         }
     }
 
