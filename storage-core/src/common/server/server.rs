@@ -44,7 +44,8 @@ pub trait QuicServer: Send + Sync + Clone + 'static {
             };
 
             let (send, recv) = stream;
-            self.handle_request(send, recv).await?;
+            let self_clone = self.clone();
+            tokio::spawn(async move {self_clone.handle_request(send, recv).await});
         }
     }
 

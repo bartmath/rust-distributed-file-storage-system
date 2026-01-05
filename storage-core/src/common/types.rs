@@ -14,7 +14,7 @@ pub struct ChunkserverLocation {
     pub hostname: Hostname,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChunkLocations {
     pub chunk_id: ChunkId,
     pub primary: ChunkserverLocation,

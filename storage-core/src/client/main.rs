@@ -6,7 +6,6 @@ use clap::Parser;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
-pub mod chunk_send;
 mod client;
 mod commands;
 mod config;
@@ -64,6 +63,7 @@ async fn run(client: Client) -> anyhow::Result<()> {
                 break;
             }
             Err(ReadlineError::Eof) => {
+                client.close_session().await?;
                 println!("CTRL-D");
                 break;
             }

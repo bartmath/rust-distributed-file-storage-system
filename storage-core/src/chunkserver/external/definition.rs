@@ -82,7 +82,7 @@ impl ChunkserverExternal {
         fs::rename(&payload.chunk_transfer.commit(), &chunk_final_path).await?;
 
         RequestStatusPayload::Ok.send_payload(send).await?;
-        
+
         Ok(())
     }
 
@@ -124,7 +124,7 @@ impl ChunkserverExternal {
         }
         .send_payload(send)
         .await?;
-        
+
         Ok(())
     }
 }
