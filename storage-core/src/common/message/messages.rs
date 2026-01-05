@@ -1,4 +1,4 @@
-use crate::common::messages::message_payloads::*;
+use crate::common::message::message_payloads::*;
 use anyhow::Result;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;

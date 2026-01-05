@@ -36,14 +36,14 @@ pub(crate) trait SerializablePayload:
 
 macro_rules! impl_serializable_payload {
     ($type:ty) => {
-        impl crate::common::messages::payload::SerializablePayload for $type {}
+        impl crate::common::message::payload::SerializablePayload for $type {}
 
         #[async_trait]
-        impl crate::common::messages::payload::MessagePayload for $type {
+        impl crate::common::message::payload::MessagePayload for $type {
             type Ctx = ();
 
             async fn send_payload(&self, send: &mut ::quinn::SendStream) -> ::anyhow::Result<()> {
-                <Self as crate::common::messages::payload::SerializablePayload>::send_payload(
+                <Self as crate::common::message::payload::SerializablePayload>::send_payload(
                     self, send,
                 )
                 .await
@@ -53,7 +53,7 @@ macro_rules! impl_serializable_payload {
                 recv: &mut ::quinn::RecvStream,
                 _ctx: &(),
             ) -> ::anyhow::Result<Self> {
-                <Self as crate::common::messages::payload::SerializablePayload>::recv_payload(recv)
+                <Self as crate::common::message::payload::SerializablePayload>::recv_payload(recv)
                     .await
             }
         }

@@ -6,7 +6,9 @@ use clap::Parser;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
+mod chunkserver_connection_pool;
 mod client;
+mod client_chunk_uploader;
 mod commands;
 mod config;
 mod setup;

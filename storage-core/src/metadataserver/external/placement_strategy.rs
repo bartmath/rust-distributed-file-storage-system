@@ -36,8 +36,8 @@ impl PlacementStrategy for RandomPlacementStrategy {
     ) -> Vec<(PrimaryServerId, Vec<SecondaryServerId>)> {
         let mut candidates = Vec::new();
         available_servers
-            .iter_async(|k, _| {
-                candidates.push(k.clone());
+            .iter_async(|server_id, _| {
+                candidates.push(*server_id);
                 true
             })
             .await;

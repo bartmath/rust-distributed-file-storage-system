@@ -134,7 +134,7 @@ impl MetadataServerExternal {
                 .insert_async(
                     *chunk_id,
                     ChunkMetadata {
-                        primary: Some(primary.clone()),
+                        primary: Some(*primary),
                         replicas: secondaries.clone(),
                     },
                 )

@@ -116,15 +116,18 @@ pub(crate) fn chunkserver_setup(
     let chunkserver_connections = Arc::new(scc::HashMap::new());
 
     let internal_chunkserver = ChunkserverInternal::new(
-        options.chunkserver_hostname,
-        options.rack_id,
-        options.advertised_internal_addr,
-        options.advertised_external_addr,
+        (options.chunkserver_hostname, options.rack_id),
+        (
+            options.advertised_internal_addr,
+            options.advertised_external_addr,
+        ),
         requests_since_heartbeat.clone(),
         chunks.clone(),
         internal_endpoint.clone(),
-        options.metadata_server_addr,
-        options.metadata_server_hostname,
+        (
+            options.metadata_server_addr,
+            options.metadata_server_hostname,
+        ),
         chunkserver_connections.clone(),
     );
 

@@ -1,23 +1,19 @@
+use crate::chunkserver_connection_pool::ChunkserverConnectionPool;
+use crate::client_chunk_uploader::ClientChunkUploader;
 use crate::commands::CliCommand;
-use crate::types::{ChunkId, ChunkserverId, Hostname};
+use crate::types::Hostname;
 use arc_swap::ArcSwapOption;
-use futures::{StreamExt, stream};
-use moka::future::Cache;
-use quinn::{Connection, Endpoint, RecvStream, SendStream};
+use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use storage_core::common::config::{
-    MAX_CHUNK_SIZE, MAX_CLIENT_IDLE_TIMEOUT, MAX_SPAWNED_TASKS, N_CHUNK_REPLICAS,
-};
-use storage_core::common::types::{ChunkLocations, ChunkserverLocation};
+use storage_core::common::config::{MAX_CLIENT_IDLE_TIMEOUT, N_CHUNK_REPLICAS};
 use storage_core::common::{
-    ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkTransfer,
-    ChunkserverExternalMessage, DownloadChunkRequestPayload, DownloadChunkResponsePayload,
+    ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkserverExternalMessage,
+    DownloadChunkRequestPayload, DownloadChunkResponsePayload,
     GetClientFolderStructureRequestPayload, GetClientFolderStructureResponsePayload,
     GetFilePlacementRequestPayload, GetFilePlacementResponsePayload, Message, MessagePayload,
     MetadataServerExternalMessage, RequestStatusPayload, UpdateClientFolderStructurePayload,
-    UploadChunkPayload,
 };
 use tokio::fs::File;
 
@@ -29,19 +25,8 @@ pub(super) struct Client {
 
     metadata_server_connection: Arc<ArcSwapOption<Connection>>,
 
-    chunkserver_connections: Cache<ChunkserverId, Arc<Connection>>,
-}
-
-impl Clone for Client {
-    fn clone(&self) -> Self {
-        Client {
-            metadata_server_addr: self.metadata_server_addr,
-            metadata_server_hostname: self.metadata_server_hostname.clone(),
-            endpoint: self.endpoint.clone(),
-            metadata_server_connection: self.metadata_server_connection.clone(),
-            chunkserver_connections: self.chunkserver_connections.clone(),
-        }
-    }
+    chunkserver_connection_pool: ChunkserverConnectionPool,
+    client_chunks_uploader: ClientChunkUploader,
 }
 
 impl Client {
@@ -50,15 +35,16 @@ impl Client {
         metadata_server_hostname: Hostname,
         endpoint: Endpoint,
     ) -> Self {
+        let endpoint = Arc::new(endpoint);
+        let pool = ChunkserverConnectionPool::new(endpoint.clone(), 256, MAX_CLIENT_IDLE_TIMEOUT);
+
         Client {
             metadata_server_addr,
             metadata_server_hostname: Arc::new(metadata_server_hostname),
-            endpoint: Arc::new(endpoint),
+            endpoint,
             metadata_server_connection: Arc::default(),
-            chunkserver_connections: Cache::builder()
-                .max_capacity(256)
-                .time_to_live(MAX_CLIENT_IDLE_TIMEOUT)
-                .build(),
+            chunkserver_connection_pool: pool.clone(),
+            client_chunks_uploader: ClientChunkUploader::new(pool),
         }
     }
     pub(super) async fn handle_command(&self, cmd: CliCommand) -> anyhow::Result<()> {
@@ -119,90 +105,6 @@ impl Client {
         Ok(())
     }
 
-    async fn get_chunkserver_stream(
-        &self,
-        chunkserver_location: ChunkserverLocation,
-    ) -> anyhow::Result<(SendStream, RecvStream)> {
-        // Opens streams on either existing connection or on newly created connection
-        // (lambda is run if the connection wasn't in Cache).
-        self.chunkserver_connections
-            .try_get_with::<_, anyhow::Error>(chunkserver_location.id, async {
-                let conn = Arc::new(
-                    self.endpoint
-                        .connect(chunkserver_location.addr, &*chunkserver_location.hostname)?
-                        .await?,
-                );
-                self.chunkserver_connections
-                    .insert(chunkserver_location.id, conn.clone())
-                    .await;
-                Ok(conn)
-            })
-            .await
-            .map_err(|_| anyhow::anyhow!("Cache error"))?
-            .open_bi()
-            .await
-            .map_err(|_| anyhow::anyhow!("Cache error"))
-    }
-
-    async fn upload_chunk(
-        self,
-        offset: u64,
-        file_path: PathBuf,
-        chunk_id: ChunkId,
-        chunk_size: u64,
-        chunkserver: ChunkserverLocation,
-    ) -> anyhow::Result<()> {
-        let (mut send, _) = self.get_chunkserver_stream(chunkserver).await?;
-
-        let chunk_transfer = ChunkTransfer::new(Some(offset), file_path, false);
-
-        ChunkserverExternalMessage::UploadChunk(UploadChunkPayload {
-            chunk_id,
-            chunk_size,
-            chunk_transfer,
-        })
-        .send(&mut send)
-        .await?;
-
-        send.finish()?;
-        Ok(())
-    }
-
-    async fn batch_upload_chunks<F>(
-        &self,
-        file_path: PathBuf,
-        file_size: u64,
-        chunk_locations: Vec<ChunkLocations>,
-        mut chunkserver_extractor: F,
-    ) -> anyhow::Result<()>
-    where
-        F: FnMut(ChunkLocations) -> Option<(ChunkId, ChunkserverLocation)>,
-    {
-        let mut upload_tasks = stream::iter(chunk_locations.into_iter().enumerate().filter_map(
-            |(id, chunk_location)| {
-                let client = self.clone();
-                let file_path = file_path.clone();
-                let offset = (MAX_CHUNK_SIZE * id) as u64;
-                let chunk_size = std::cmp::min(file_size - offset, MAX_CHUNK_SIZE as u64);
-                let (chunk_id, chunkserver) = chunkserver_extractor(chunk_location)?;
-
-                Some(tokio::spawn(async move {
-                    client
-                        .upload_chunk(offset, file_path, chunk_id, chunk_size, chunkserver)
-                        .await
-                }))
-            },
-        ))
-        .buffer_unordered(MAX_SPAWNED_TASKS);
-
-        // Process results as they finish
-        while let Some(result) = upload_tasks.next().await {
-            result??;
-        }
-
-        Ok(())
-    }
-
     async fn upload_file(&self, file_path: PathBuf) -> anyhow::Result<()> {
         if !file_path.exists() {
             return Err(anyhow::anyhow!("File does not exist: {:?}", file_path));
@@ -231,13 +133,14 @@ impl Client {
         let chunk_locations = res.selected_chunkservers;
 
         // Upload chunks to chunkservers
-        self.batch_upload_chunks(
-            file_path.clone(),
-            file_size,
-            chunk_locations.clone(),
-            move |chunk_locs| Some((chunk_locs.chunk_id, chunk_locs.primary)),
-        )
-        .await?;
+        self.client_chunks_uploader
+            .batch_upload_chunks(
+                file_path.clone(),
+                file_size,
+                chunk_locations.clone(),
+                move |chunk_locs| Some((chunk_locs.chunk_id, chunk_locs.primary)),
+            )
+            .await?;
 
         // We upload the file's chunks to all secondary locations.
         // The closure now returns Option, because the number of secondary chunkservers
@@ -245,18 +148,19 @@ impl Client {
         // In the future, it will be chunkserver's task to replicate from the primary
         // and the client will only upload to primary chunkserver.
         for i in 0..N_CHUNK_REPLICAS {
-            self.batch_upload_chunks(
-                file_path.clone(),
-                file_size,
-                chunk_locations.clone(),
-                move |chunk_locs| {
-                    chunk_locs
-                        .replicas
-                        .get(i)
-                        .map(|replica| (chunk_locs.chunk_id, replica.clone()))
-                },
-            )
-            .await?;
+            self.client_chunks_uploader
+                .batch_upload_chunks(
+                    file_path.clone(),
+                    file_size,
+                    chunk_locations.clone(),
+                    move |chunk_locs| {
+                        chunk_locs
+                            .replicas
+                            .get(i)
+                            .map(|replica| (chunk_locs.chunk_id, replica.clone()))
+                    },
+                )
+                .await?;
         }
 
         println!("Upload complete.");
@@ -285,6 +189,7 @@ impl Client {
 
         for chunk_location in res.chunks_locations {
             let (mut cs_send, mut cs_recv) = self
+                .chunkserver_connection_pool
                 .get_chunkserver_stream(chunk_location.primary.clone())
                 .await?;
 

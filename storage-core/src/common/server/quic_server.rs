@@ -13,13 +13,13 @@ pub trait QuicServer: Send + Sync + Clone + 'static {
 
         let endpoint = self.listening_endpoint();
         loop {
-            if let Some(incoming) = endpoint.accept().await {
-                if let Ok(connecting) = incoming.accept() {
-                    let server_clone = self.clone();
-                    tokio::spawn(async move {
-                        server_clone.handle_connection_handshake(connecting).await
-                    });
-                }
+            if let Some(incoming) = endpoint.accept().await
+                && let Ok(connecting) = incoming.accept()
+            {
+                let server_clone = self.clone();
+                tokio::spawn(
+                    async move { server_clone.handle_connection_handshake(connecting).await },
+                );
             }
         }
     }

@@ -1,5 +1,5 @@
-use crate::common::messages::chunk_transfer::ChunkTransfer;
-use crate::common::messages::payload::{ChunkPayload, impl_serializable_payload};
+use crate::common::message::chunk_transfer::ChunkTransfer;
+use crate::common::message::payload::{ChunkPayload, impl_serializable_payload};
 use crate::common::types::{ChunkId, ChunkLocations, Hostname, RackId};
 use async_trait::async_trait;
 use quinn::{RecvStream, SendStream};
