@@ -11,9 +11,9 @@ use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_SPAWNED_TASKS};
 use storage_core::common::types::{ChunkLocations, ChunkserverLocation};
 use storage_core::common::{
     ChunkPlacementRequestPayload, ChunkPlacementResponsePayload,
-    GetClientFolderStructureRequestPayload, GetFilePlacementRequestPayload,
-    GetFilePlacementResponsePayload, MessagePayload, RequestStatusPayload,
-    UpdateClientFolderStructurePayload,
+    GetClientFolderStructureRequestPayload, GetClientFolderStructureResponsePayload,
+    GetFilePlacementRequestPayload, GetFilePlacementResponsePayload, MessagePayload,
+    RequestStatusPayload, UpdateClientFolderStructurePayload,
 };
 use storage_core::dbg_println;
 use uuid::Uuid;
@@ -231,10 +231,25 @@ impl MetadataServerExternal {
 
     pub(super) async fn fetch_folder_structure(
         &self,
-        _send: &mut SendStream,
+        send: &mut SendStream,
         _payload: GetClientFolderStructureRequestPayload,
     ) -> anyhow::Result<()> {
-        todo!("unimplemented fetch_folder_structure")
+        let mut file_ids = Vec::new();
+
+        self.files
+            .iter_async(|file_id, _metadata| {
+                file_ids.push(file_id.clone());
+                true
+            })
+            .await;
+
+        GetClientFolderStructureResponsePayload {
+            all_files: file_ids,
+        }
+        .send_payload(send)
+        .await?;
+
+        Ok(())
     }
 
     pub(super) async fn update_folder_structure(
@@ -242,6 +257,7 @@ impl MetadataServerExternal {
         _send: &mut SendStream,
         _payload: UpdateClientFolderStructurePayload,
     ) -> anyhow::Result<()> {
-        todo!("unimplemented update_folder_structure")
+        // TODO: unimplemented update_folder_structure
+        Ok(())
     }
 }

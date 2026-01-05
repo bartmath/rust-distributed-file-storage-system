@@ -102,14 +102,14 @@ impl Client {
             println!("You haven't saved any files yet.");
         } else {
             let list_str = format!(
-                r#"[{}]"#,
+                "[\n{}\n]",
                 res.all_files
                     .iter()
-                    .map(|x| format!("  {}", x))
+                    .map(|x| format!("\t{},", x))
                     .collect::<Vec<_>>()
-                    .join(",\n")
+                    .join("\n")
             );
-            println!("Files stored in storage\n{}", list_str);
+            println!("Files stored in storage:\n{}", list_str);
         }
 
         Ok(())
