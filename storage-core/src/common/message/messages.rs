@@ -1,12 +1,13 @@
-use crate::common::messages::message_payloads::*;
+use crate::common::message::message_payloads::*;
 use anyhow::Result;
+use async_trait::async_trait;
 use quinn::{RecvStream, SendStream};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use storage_macros::Message;
 use tokio::io::AsyncWriteExt;
 
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait Message: Serialize + DeserializeOwned {
     async fn send(&self, send: &mut SendStream) -> Result<()>;
     async fn recv(recv: &mut RecvStream) -> Result<Self>;
@@ -35,14 +36,4 @@ pub enum ChunkserverExternalMessage {
 #[derive(Debug, Serialize, Deserialize, Message)]
 pub enum ChunkserverInternalMessage {
     AcceptNewChunkserver(AcceptNewChunkServerPayload),
-}
-
-// TODO probably not needed since it's client who initiates a connection
-#[derive(Debug, Serialize, Deserialize, Message)]
-pub enum ClientMessage {
-    ChunkPlacementResponse(ChunkPlacementResponsePayload),
-    GetFilePlacementResponse(GetFilePlacementResponsePayload),
-    DownloadChunkResponse(DownloadChunkResponsePayload),
-    RequestStatus(RequestStatusPayload),
-    GetClientFolderStructureResponse(GetClientFolderStructureResponsePayload),
 }

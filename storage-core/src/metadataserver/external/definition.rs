@@ -8,13 +8,14 @@ use futures::{StreamExt, TryStreamExt, stream};
 use quinn::{Endpoint, SendStream};
 use std::sync::Arc;
 use storage_core::common::config::{MAX_CHUNK_SIZE, MAX_SPAWNED_TASKS};
-use storage_core::common::types::ChunkLocations;
+use storage_core::common::types::{ChunkLocations, ChunkserverLocation};
 use storage_core::common::{
-    ChunkPlacementRequestPayload, ChunkPlacementResponsePayload, ChunkserverLocation,
-    ClientMessage, GetClientFolderStructureRequestPayload, GetFilePlacementRequestPayload,
-    GetFilePlacementResponsePayload, Message, RequestStatusPayload,
+    ChunkPlacementRequestPayload, ChunkPlacementResponsePayload,
+    GetClientFolderStructureRequestPayload, GetFilePlacementRequestPayload,
+    GetFilePlacementResponsePayload, MessagePayload, RequestStatusPayload,
     UpdateClientFolderStructurePayload,
 };
+use storage_core::dbg_println;
 use uuid::Uuid;
 
 /// 'MetadataServerExternal' is a struct used for communication with clients.
@@ -59,9 +60,9 @@ impl MetadataServerExternal {
                     .get_async(&s_id)
                     .await
                     .map(|server_entry| ChunkserverLocation {
-                        chunk_id: s_id,
-                        server_location: server_entry.get().external_address,
-                        server_hostname: server_entry.get().hostname.clone(),
+                        id: s_id,
+                        addr: server_entry.get().external_address,
+                        hostname: server_entry.get().hostname.clone(),
                     })
             }
         };
@@ -87,7 +88,14 @@ impl MetadataServerExternal {
         send: &mut SendStream,
         payload: ChunkPlacementRequestPayload,
     ) -> anyhow::Result<()> {
+        dbg_println!(
+            "Received placement request for file {} of size {}",
+            payload.filename,
+            payload.file_size
+        );
+
         let n_chunks = payload.file_size.div_ceil(MAX_CHUNK_SIZE);
+        dbg_println!("Will assign {} chunks", n_chunks);
         let chunk_ids: Vec<_> = (0..n_chunks).map(|_| Uuid::new_v4()).collect();
 
         if self
@@ -103,8 +111,8 @@ impl MetadataServerExternal {
         {
             // Prevent from creating the same file again (TODO: for given user).
 
-            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
-                .send(send)
+            let _ = RequestStatusPayload::InvalidRequest
+                .send_payload(send)
                 .await;
             return Ok(());
         }
@@ -126,8 +134,7 @@ impl MetadataServerExternal {
                 .insert_async(
                     *chunk_id,
                     ChunkMetadata {
-                        chunk_id: *chunk_id,
-                        primary: Some(primary.clone()),
+                        primary: Some(*primary),
                         replicas: secondaries.clone(),
                     },
                 )
@@ -135,7 +142,7 @@ impl MetadataServerExternal {
         }
 
         let active_chunkservers = self.active_chunkservers.clone();
-        let selected_chunkservers = stream::iter(chunk_server_matchings)
+        let selected_chunkservers: Vec<_> = stream::iter(chunk_server_matchings)
             .map(|(chunk_id, (primary, secondaries))| {
                 Self::resolve_chunk_locations(
                     active_chunkservers.clone(),
@@ -148,10 +155,10 @@ impl MetadataServerExternal {
             .try_collect()
             .await?;
 
-        ClientMessage::ChunkPlacementResponse(ChunkPlacementResponsePayload {
+        ChunkPlacementResponsePayload {
             selected_chunkservers,
-        })
-        .send(send)
+        }
+        .send_payload(send)
         .await?;
 
         Ok(())
@@ -162,13 +169,20 @@ impl MetadataServerExternal {
         send: &mut SendStream,
         payload: GetFilePlacementRequestPayload,
     ) -> anyhow::Result<()> {
+        dbg_println!("Fetching {} placement", payload.filename);
+
         let Some(file_chunks_ids) = self
             .files
             .read_async(&payload.filename, |_, file| file.chunks.clone())
             .await
         else {
-            let _ = ClientMessage::RequestStatus(RequestStatusPayload::InvalidRequest)
-                .send(send)
+            dbg_println!(
+                "Client requested {} file, which isn't stored anywhere",
+                payload.filename
+            );
+
+            let _ = RequestStatusPayload::InvalidRequest
+                .send_payload(send)
                 .await;
             return Ok(());
         };
@@ -208,11 +222,9 @@ impl MetadataServerExternal {
             .try_collect::<Vec<_>>()
             .await?;
 
-        ClientMessage::GetFilePlacementResponse(GetFilePlacementResponsePayload {
-            chunks_locations,
-        })
-        .send(send)
-        .await?;
+        GetFilePlacementResponsePayload { chunks_locations }
+            .send_payload(send)
+            .await?;
 
         Ok(())
     }

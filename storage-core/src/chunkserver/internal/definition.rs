@@ -1,5 +1,4 @@
-use crate::chunk::{Chunk, ChunkId};
-use crate::types::{Hostname, RackId, ServerId};
+use crate::types::{Chunk, ChunkId, Hostname, RackId, ServerId};
 use arc_swap::ArcSwap;
 use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;
@@ -46,22 +45,26 @@ pub struct ChunkserverInternal {
     chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
 }
 
+type InternalSocketAddr = SocketAddr;
+type ExternalSocketAddr = SocketAddr;
+
 impl ChunkserverInternal {
     pub(crate) fn new(
-        chunkserver_hostname: Hostname,
-        rack_id: RackId,
-        internal_address: SocketAddr,
-        external_address: SocketAddr,
+        identity: (Hostname, RackId),
+        addresses: (InternalSocketAddr, ExternalSocketAddr),
         requests_since_heartbeat: Arc<AtomicU64>,
         chunks: Arc<scc::HashMap<ChunkId, Chunk>>,
         internal_endpoint: Arc<Endpoint>,
-        metadata_server_addr: SocketAddr,
-        metadata_server_hostname: Hostname,
+        metadata_server_info: (SocketAddr, Hostname),
         chunkserver_connections: Arc<scc::HashMap<ServerId, Connection>>,
     ) -> Self {
+        let (hostname, rack_id) = identity;
+        let (metadata_server_addr, metadata_server_hostname) = metadata_server_info;
+        let (internal_address, external_address) = addresses;
+
         ChunkserverInternal {
             server_id: Uuid::new_v4(),
-            hostname: Arc::new(chunkserver_hostname),
+            hostname: Arc::new(hostname),
             rack_id: Arc::new(rack_id),
             internal_address,
             external_address,
@@ -70,8 +73,8 @@ impl ChunkserverInternal {
             internal_endpoint,
             metadata_server_addr,
             metadata_server_hostname,
-            metadata_reconnect_lock: Arc::new(Mutex::new(())),
-            metadata_server_connection: Arc::new(ArcSwap::from_pointee(None)),
+            metadata_reconnect_lock: Arc::default(),
+            metadata_server_connection: Arc::default(),
             chunkserver_connections,
         }
     }
@@ -125,13 +128,13 @@ impl ChunkserverInternal {
     ) -> anyhow::Result<()> {
         let mut stored_chunks_ids = Vec::new();
         self.chunks
-            .iter_async(|k, _| {
-                stored_chunks_ids.push(k.clone());
+            .iter_async(|chunk_id, _| {
+                stored_chunks_ids.push(*chunk_id);
                 true
             })
             .await;
 
-        let (mut send, mut _recv) = metadata_server_conn.open_bi().await?;
+        let (mut send, _) = metadata_server_conn.open_bi().await?;
 
         dbg_println!("Discovering Metadata server");
 

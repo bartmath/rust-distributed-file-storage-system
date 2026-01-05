@@ -113,8 +113,7 @@ impl MetadataServerInternal {
 
             let _updated_chunks: HashSet<_> = lost_chunk_replicas
                 .into_iter()
-                .map(|(_, chunks)| chunks)
-                .flatten()
+                .flat_map(|(_, chunks)| chunks)
                 .collect();
 
             // TODO: replicate & select primary"

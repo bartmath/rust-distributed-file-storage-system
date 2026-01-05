@@ -5,7 +5,7 @@ use syn::{Data, DataEnum, DeriveInput, Fields, parse_macro_input};
 /// `Message` trait derivation for an enum to act as a network protocol dispatcher.
 ///
 /// # Functionality
-/// Macro transforms a Rust `enum` into a binary format for sending and receiving messages.
+/// Macro transforms a Rust `enum` into a binary format for sending and receiving message.
 ///
 /// - **Format:** `[1 byte Variant ID] + [Payload Data]`
 /// - **Sending:** Matches the enum variant, writes its index as a `u8` ID, and delegates
@@ -47,13 +47,14 @@ pub fn derive_message_payload_enum(input: TokenStream) -> TokenStream {
 
     // Implement sending and receiving message
     let expanded = quote! {
-        impl crate::common::messages::messages::Message for #name {
+        #[::async_trait::async_trait]
+        impl crate::common::message::messages::Message for #name {
             async fn send(&self, send: &mut ::quinn::SendStream) -> ::anyhow::Result<()> {
                 match self {
                     #(
                         #name::#variant_names(payload) => {
                             send.write_u8(#variant_idxs).await?;
-                            crate::common::messages::payload::MessagePayload::send_payload(payload, send).await?
+                            crate::common::message::payload::MessagePayload::send_payload(payload, send).await?
                         }
                     )*
                 }
@@ -66,7 +67,7 @@ pub fn derive_message_payload_enum(input: TokenStream) -> TokenStream {
                 match variant_id {
                     #(
                         #variant_idxs => {
-                            let payload = <#payload_types as crate::common::messages::payload::MessagePayload>::recv_payload(recv).await?;
+                            let payload = <#payload_types as crate::common::message::payload::MessagePayload>::recv_payload(recv, &()).await?;
                             ::anyhow::Ok(#name::#variant_names(payload))
                         }
                     )*

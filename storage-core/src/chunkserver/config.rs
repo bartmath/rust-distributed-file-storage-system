@@ -10,10 +10,10 @@ pub(super) struct ChunkserverOpt {
     #[clap(long = "keylog", default_value = "false")]
     pub(super) keylog: bool,
     /// (Relative) path to temporary directory to save unverified files to.
-    #[clap(long = "tmp-root", default_value = "tmp/")]
+    #[clap(long = "tmp-root")]
     pub(super) tmp_root: PathBuf,
     /// (Relative) path to final directory to save files to.
-    #[clap(long = "final-root", default_value = "final/")]
+    #[clap(long = "final-root")]
     pub(super) final_root: PathBuf,
     /// TLS private key in PEM format
     #[clap(short = 'k', long = "key", requires = "cert")]

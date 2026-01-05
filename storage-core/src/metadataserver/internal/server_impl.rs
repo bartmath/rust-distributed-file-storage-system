@@ -29,6 +29,8 @@ impl QuicServer for MetadataServerInternal {
             }
         };
 
+        send.finish()?;
+
         Ok(())
     }
 }
