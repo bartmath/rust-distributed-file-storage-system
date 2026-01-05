@@ -4,6 +4,7 @@ use crate::commands::CliCommand;
 use crate::types::Hostname;
 use arc_swap::ArcSwapOption;
 use quinn::{Connection, Endpoint};
+use rand::seq::IndexedRandom;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -16,6 +17,11 @@ use storage_core::common::{
     MetadataServerExternalMessage, RequestStatusPayload, UpdateClientFolderStructurePayload,
 };
 use tokio::fs::File;
+
+pub(super) enum LoopAction {
+    Continue,
+    Exit,
+}
 
 pub(super) struct Client {
     metadata_server_addr: SocketAddr,
@@ -47,7 +53,7 @@ impl Client {
             client_chunks_uploader: ClientChunkUploader::new(pool),
         }
     }
-    pub(super) async fn handle_command(&self, cmd: CliCommand) -> anyhow::Result<()> {
+    pub(super) async fn handle_command(&self, cmd: CliCommand) -> anyhow::Result<LoopAction> {
         match cmd {
             CliCommand::Ls => self.list_all_files().await,
             CliCommand::Upload { path } => self.upload_file(path).await,
@@ -55,8 +61,12 @@ impl Client {
                 file_name,
                 destination,
             } => self.download_file(file_name, destination).await,
-            CliCommand::Exit => self.close_session().await,
-        }
+            CliCommand::Exit => {
+                return Ok(LoopAction::Exit);
+            }
+        }?;
+
+        Ok(LoopAction::Continue)
     }
 
     async fn get_metadata_connection(&self) -> anyhow::Result<Arc<Connection>> {
@@ -188,9 +198,18 @@ impl Client {
         let mut offset = 0u64;
 
         for chunk_location in res.chunks_locations {
+            // Load Balancing: Randomly select a replica to distribute read traffic
+            // instead of always hammering one chunkserver.
+            // We fallback to the primary if the replicas list is empty.
+            let target_server = chunk_location
+                .replicas
+                .choose(&mut rand::rng())
+                .unwrap_or(&chunk_location.primary)
+                .clone();
+
             let (mut cs_send, mut cs_recv) = self
                 .chunkserver_connection_pool
-                .get_chunkserver_stream(chunk_location.primary.clone())
+                .get_chunkserver_stream(target_server)
                 .await?;
 
             ChunkserverExternalMessage::DownloadChunkRequest(DownloadChunkRequestPayload {
@@ -199,7 +218,7 @@ impl Client {
             .send(&mut cs_send)
             .await?;
 
-            // Read file's chunks and stream them straight to the file
+            // Receive file's chunks and stream them straight to the file
             let chunk_resp = DownloadChunkResponsePayload::recv_payload(
                 &mut cs_recv,
                 &(full_destination.clone(), offset), // Context for ChunkPayload::recv_chunk
@@ -217,10 +236,11 @@ impl Client {
         let conn = self.get_metadata_connection().await?;
         let (mut send, mut recv) = conn.open_bi().await?;
 
-        let req = MetadataServerExternalMessage::UpdateClientFolderStructure(
+        MetadataServerExternalMessage::UpdateClientFolderStructure(
             UpdateClientFolderStructurePayload {},
-        );
-        req.send(&mut send).await?;
+        )
+        .send(&mut send)
+        .await?;
 
         let status = RequestStatusPayload::recv_payload(&mut recv, &()).await?;
 

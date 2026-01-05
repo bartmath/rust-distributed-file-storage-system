@@ -1,4 +1,4 @@
-use crate::client::Client;
+use crate::client::{Client, LoopAction};
 use crate::commands::Cli;
 use crate::config::ClientOpt;
 use crate::setup::setup;
@@ -32,49 +32,43 @@ async fn run(client: Client) -> anyhow::Result<()> {
 
     loop {
         let readline = rl.readline(">> ");
-        match readline {
+        let args = match readline {
             Ok(line) => {
                 let line = line.trim();
                 if line.is_empty() {
                     continue;
                 }
 
-                let args = match shlex::split(line) {
+                match shlex::split(line) {
                     Some(a) => a,
                     None => {
                         println!("Error: Invalid quoting in command");
                         continue;
                     }
-                };
-
-                match Cli::try_parse_from(args) {
-                    Ok(cli) => {
-                        client.handle_command(cli.command).await.expect("Err");
-                        //if let Err(e) = client.handle_command(cli.command).await {
-                        //    println!("Command failed: {}", e);
-                        //}
-                    }
-                    Err(e) => {
-                        // Print Clap's error/help message
-                        e.print().ok();
-                    }
                 }
             }
-            Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
-                break;
-            }
-            Err(ReadlineError::Eof) => {
-                client.close_session().await?;
-                println!("CTRL-D");
-                break;
-            }
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
             Err(err) => {
                 println!("Error: {:?}", err);
                 break;
             }
-        }
+        };
+
+        match Cli::try_parse_from(args) {
+            Ok(cli) => match client.handle_command(cli.command).await {
+                Ok(LoopAction::Continue) => {}
+                Ok(LoopAction::Exit) => break,
+                Err(e) => println!("Command error: {}", e),
+            },
+            Err(e) => {
+                // Print Clap's error/help message
+                e.print().ok();
+            }
+        };
     }
+
+    println!("Closing session...");
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(1), client.close_session()).await;
 
     Ok(())
 }

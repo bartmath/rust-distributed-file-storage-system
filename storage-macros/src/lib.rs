@@ -47,6 +47,7 @@ pub fn derive_message_payload_enum(input: TokenStream) -> TokenStream {
 
     // Implement sending and receiving message
     let expanded = quote! {
+        #[::async_trait::async_trait]
         impl crate::common::message::messages::Message for #name {
             async fn send(&self, send: &mut ::quinn::SendStream) -> ::anyhow::Result<()> {
                 match self {

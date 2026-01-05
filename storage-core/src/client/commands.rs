@@ -11,18 +11,26 @@ pub(super) struct Cli {
 /// Available client commands
 #[derive(Subcommand, Debug)]
 pub(super) enum CliCommand {
-    /// List all files on the server
+    /// List all files currently stored in the distributed file system.
     Ls,
-    /// Upload a file to the server
-    Upload { path: PathBuf },
-    /// Download a file from the server
+
+    /// Upload a local file to the distributed storage.
+    Upload {
+        /// Path to the local file to upload.
+        path: PathBuf,
+    },
+
+    /// Download a file from the distributed storage to the local machine.
     Download {
-        /// The name of the remote file
+        /// The name of the file within the storage system.
         file_name: String,
-        /// The local folder to save it to
+
+        /// The local directory where the file should be saved.
+        /// Defaults to the current working directory.
         #[arg(short = 'd', default_value = "./")]
         destination: PathBuf,
     },
-    /// Exit the client
+
+    /// Terminate the client session and exit.
     Exit,
 }
