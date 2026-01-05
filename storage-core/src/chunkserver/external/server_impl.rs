@@ -36,6 +36,8 @@ impl QuicServer for ChunkserverExternal {
                 .await;
         }
 
+        send.finish()?;
+
         Ok(())
     }
 }

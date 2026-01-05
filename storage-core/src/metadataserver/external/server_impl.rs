@@ -41,6 +41,8 @@ impl QuicServer for MetadataServerExternal {
                 .await;
         }
 
+        send.finish()?;
+
         Ok(())
     }
 }

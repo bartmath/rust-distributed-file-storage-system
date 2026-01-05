@@ -79,15 +79,10 @@ impl ChunkserverExternal {
             .expect("Final storage path not initialized via config")
             .join(payload.chunk_id.to_string());
 
-        dbg_println!("Chunk {} to be renamed", payload.chunk_id);
-
         fs::rename(&payload.chunk_transfer.commit(), &chunk_final_path).await?;
 
-        // RequestStatusPayload::Ok.send_payload(send).await?;
-        send.finish()?;
-
-        dbg_println!("Chunk {} is uploaded successfully", payload.chunk_id);
-
+        RequestStatusPayload::Ok.send_payload(send).await?;
+        
         Ok(())
     }
 
@@ -122,8 +117,6 @@ impl ChunkserverExternal {
             .expect("Final storage path not initialized via config")
             .join(payload.chunk_id.to_string());
 
-        dbg_println!("Chunk {} to be sent over to client", payload.chunk_id);
-
         DownloadChunkResponsePayload {
             chunk_id: payload.chunk_id,
             chunk_size,
@@ -131,11 +124,7 @@ impl ChunkserverExternal {
         }
         .send_payload(send)
         .await?;
-
-        send.finish()?;
-
-        dbg_println!("Chunk {} was downloaded successfully", payload.chunk_id);
-
+        
         Ok(())
     }
 }

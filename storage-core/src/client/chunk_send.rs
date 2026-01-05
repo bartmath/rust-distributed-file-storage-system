@@ -69,7 +69,6 @@ impl SendChunkMetadata {
         let (mut send, mut recv) = conn.open_bi().await?;
 
         message.send(&mut send).await?;
-        send.finish()?;
 
         Ok(self.chunk_id)
     }

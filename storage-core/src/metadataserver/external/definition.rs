@@ -122,8 +122,6 @@ impl MetadataServerExternal {
             .select_servers(n_chunks, self.active_chunkservers.clone())
             .await;
 
-        dbg_println!("Selected {} servers", selected_servers_ids.len());
-
         let chunk_server_matchings: Vec<_> = chunk_ids
             .iter()
             .copied()
@@ -158,22 +156,11 @@ impl MetadataServerExternal {
             .try_collect()
             .await?;
 
-        if selected_chunkservers.len() > 0 {
-            dbg_println!(
-                "Primary placement for file's first chunks is {}",
-                selected_chunkservers[0].primary.id
-            );
-        }
-
         ChunkPlacementResponsePayload {
             selected_chunkservers,
         }
         .send_payload(send)
         .await?;
-
-        send.finish()?;
-
-        dbg_println!("Whole upload succeeded");
 
         Ok(())
     }
@@ -236,19 +223,9 @@ impl MetadataServerExternal {
             .try_collect::<Vec<_>>()
             .await?;
 
-        dbg_println!(
-            "Resolved {} locations, len {}",
-            payload.filename,
-            chunks_locations.len()
-        );
-
         GetFilePlacementResponsePayload { chunks_locations }
             .send_payload(send)
             .await?;
-
-        send.finish()?;
-
-        dbg_println!("Sent the locations of {} to client", payload.filename);
 
         Ok(())
     }
