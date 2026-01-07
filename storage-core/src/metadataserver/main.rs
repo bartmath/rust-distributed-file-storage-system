@@ -16,7 +16,7 @@
 //! The Metadataserver will **panic** (fail to start or process requests) unless at least
 //! **N_CHUNK_REPLICAS + 1** chunkservers are connected.
 //!
-//! For example, if `N_CHUNK_REPLICAS` is 2, you need **3** connected chunkservers.
+//! For example, if `N_CHUNK_REPLICAS` is 1 (currently), you need **2** connected chunkservers.
 
 use crate::config::MetadataServerOpt;
 use crate::external::MetadataServerExternal;
