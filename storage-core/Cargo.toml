@@ -3,6 +3,7 @@ name = "storage-core"
 authors = ['Bartosz Niedzwiedz']
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.90.0"
 
 [dependencies]
 tokio = { version = "1.41", features = ["full"] }

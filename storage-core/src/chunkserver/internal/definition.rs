@@ -136,8 +136,6 @@ impl ChunkserverInternal {
 
         let (mut send, _) = metadata_server_conn.open_bi().await?;
 
-        dbg_println!("Discovering Metadata server");
-
         MetadataServerInternalMessage::ChunkServerDiscover(ChunkServerDiscoverPayload {
             server_id: self.server_id,
             hostname: self.hostname.to_string(),
@@ -147,9 +145,13 @@ impl ChunkserverInternal {
             stored_chunks: stored_chunks_ids,
         })
         .send(&mut send)
-        .await
+        .await?;
+
+        dbg_println!("Discovered Metadata server");
 
         // TODO: maybe the MetadataServer will return some answer
+
+        Ok(())
     }
 
     pub(super) async fn send_heartbeat(&mut self) -> anyhow::Result<()> {
