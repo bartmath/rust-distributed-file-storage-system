@@ -42,6 +42,9 @@ pub(super) struct ChunkserverOpt {
     /// Metadata server address for internal communication.
     #[clap(long = "metadata-server-addr", default_value = "[::1]:4433")]
     pub(super) metadata_server_addr: SocketAddr,
+    /// Metadata server address for internal communication.
+    #[clap(long = "metadata-server-cert")]
+    pub(super) metadata_server_certificate: Option<PathBuf>,
     /// Unique identification of the rack the chunkserver is placed in.
     #[clap(long = "rack-id", default_value = "rack-1")]
     pub(super) rack_id: String,

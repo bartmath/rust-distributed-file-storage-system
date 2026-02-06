@@ -8,7 +8,7 @@ use std::path::PathBuf;
 pub(super) struct ClientOpt {
     /// TLS certificate in PEM format
     #[clap(short = 'c', long = "cert")]
-    pub(super) cert: Option<PathBuf>,
+    pub(super) cert: Vec<PathBuf>,
     /// Address to listen to bind to.
     #[clap(short = 'b', long = "bind-socket-addr", default_value = "[::1]:11111")]
     pub(super) socket_addr: SocketAddr,
