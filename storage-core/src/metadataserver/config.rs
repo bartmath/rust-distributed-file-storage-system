@@ -9,10 +9,10 @@ pub(super) struct MetadataServerOpt {
     /// file to log TLS keys to for debugging
     #[clap(long = "keylog", default_value = "false")]
     pub(super) keylog: bool,
-    /// TLS private key in PEM format
+    /// TLS private key in DER format
     #[clap(short = 'k', long = "key", requires = "cert")]
     pub(super) key: Option<PathBuf>,
-    /// TLS certificate in PEM format
+    /// TLS certificate in DER format
     #[clap(short = 'c', long = "cert", requires = "key")]
     pub(super) cert: Option<PathBuf>,
     /// Address to listen on for connection from clients.

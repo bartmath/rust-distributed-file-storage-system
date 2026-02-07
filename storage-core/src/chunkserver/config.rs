@@ -15,10 +15,10 @@ pub(super) struct ChunkserverOpt {
     /// (Relative) path to final directory to save files to.
     #[clap(long = "final-root")]
     pub(super) final_root: PathBuf,
-    /// TLS private key in PEM format
+    /// TLS private key in DER format
     #[clap(short = 'k', long = "key", requires = "cert")]
     pub(super) key: Option<PathBuf>,
-    /// TLS certificate in PEM format
+    /// TLS certificate in DER format
     #[clap(short = 'c', long = "cert", requires = "key")]
     pub(super) cert: Option<PathBuf>,
     /// Chunkserver's hostname for client and other chunkserver to connect to.
