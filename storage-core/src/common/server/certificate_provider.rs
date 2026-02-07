@@ -1,11 +1,9 @@
 use crate::common::types::Hostname;
-use crate::dbg_println;
 use anyhow::{Context, Result, bail};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use std::fs;
 use std::path::PathBuf;
-use std::{fs, io};
-use tracing::info;
 
 /// Trait for providing TLS certificates to a server.
 pub trait CertificateProvider {
@@ -13,7 +11,7 @@ pub trait CertificateProvider {
 }
 
 pub fn certificate_provider(
-    hostname: Option<Hostname>,
+    _hostname: Option<Hostname>,
     key: Option<PathBuf>,
     cert: Option<PathBuf>,
 ) -> Result<Box<dyn CertificateProvider>> {
@@ -23,7 +21,7 @@ pub fn certificate_provider(
         #[cfg(debug_assertions)]
         {
             Ok(Box::new(SelfSignedCertificateProvider::new(
-                hostname.expect("Hostname not provided for self-generated certificate"),
+                _hostname.expect("Hostname not provided for self-generated certificate"),
             )))
         }
         #[cfg(not(debug_assertions))]
@@ -78,6 +76,7 @@ struct SelfSignedCertificateProvider {
     hostname: Hostname,
 }
 
+#[cfg(debug_assertions)]
 impl SelfSignedCertificateProvider {
     fn new(hostname: Hostname) -> Self {
         SelfSignedCertificateProvider { hostname }
@@ -97,8 +96,7 @@ impl CertificateProvider for SelfSignedCertificateProvider {
                 CertificateDer::from(cert),
                 PrivateKeyDer::try_from(key).map_err(anyhow::Error::msg)?,
             ),
-            Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                info!("generating self-signed certificate");
+            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let cert = rcgen::generate_simple_self_signed(vec![self.hostname.clone()])?;
                 let key = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
                 let cert = cert.cert.into();
@@ -113,7 +111,7 @@ impl CertificateProvider for SelfSignedCertificateProvider {
             }
         };
 
-        dbg_println!("Created self-signed certificates");
+        crate::dbg_println!("Created self-signed certificates");
         Ok((vec![cert], key))
     }
 }

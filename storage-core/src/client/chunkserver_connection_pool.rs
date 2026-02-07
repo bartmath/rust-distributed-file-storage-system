@@ -41,9 +41,9 @@ impl ChunkserverConnectionPool {
                 Ok(conn)
             })
             .await
-            .map_err(|_| anyhow::anyhow!("Cache error"))?
+            .map_err(|_| anyhow::anyhow!("Couldn't (re)connect to chunkserver"))?
             .open_bi()
             .await
-            .map_err(|_| anyhow::anyhow!("Cache error"))
+            .map_err(|_| anyhow::anyhow!("Couldn't (re)connect to chunkserver"))
     }
 }

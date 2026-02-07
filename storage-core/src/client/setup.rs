@@ -1,47 +1,31 @@
 use crate::client::Client;
 use crate::config::ClientOpt;
-use anyhow::Context;
 use quinn::IdleTimeout;
 use quinn::crypto::rustls::QuicClientConfig;
-use rustls::pki_types::CertificateDer;
-use rustls_platform_verifier::BuilderVerifierExt;
 use std::sync::Arc;
-use storage_core::common::ALPN_QUIC_HTTP;
 use storage_core::common::config::MAX_CLIENT_IDLE_TIMEOUT;
+use storage_core::common::configure_client_tls;
 
 pub(super) fn setup(options: ClientOpt) -> anyhow::Result<Client> {
-    let mut client_crypto = rustls::ClientConfig::builder()
-        .with_platform_verifier()
-        .expect("Could not load platform certificates")
-        .with_no_client_auth();
-
+    let cert_paths = (!options.cert.is_empty()).then_some(options.cert);
     #[cfg(debug_assertions)]
-    if options.cert.is_none() {
-        let mut roots = rustls::RootCertStore::empty();
-
+    let cert_paths = cert_paths.or_else(|| {
         // Walk certificates/**/cert.der recursively
         let certs_dir = std::env::current_dir()
             .expect("Couldn't get current directory")
             .join("certificates");
 
-        for entry in walkdir::WalkDir::new(&certs_dir)
+        let found_cert_paths = walkdir::WalkDir::new(&certs_dir)
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.file_name() == "cert.der" && e.path().is_file())
-        {
-            let cert_der = std::fs::read(entry.path())
-                .with_context(|| format!("Unable to read {}", entry.path().display()))?;
-            roots
-                .add(CertificateDer::from(cert_der.as_ref()))
-                .with_context(|| format!("Invalid cert: {}", entry.path().display()))?;
-        }
+            .map(|e| e.path().to_owned())
+            .collect::<Vec<_>>();
 
-        client_crypto = rustls::ClientConfig::builder()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-    }
+        (!found_cert_paths.is_empty()).then_some(found_cert_paths)
+    });
 
-    client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+    let client_crypto = configure_client_tls(cert_paths)?;
 
     let mut transport = quinn::TransportConfig::default();
     transport.max_idle_timeout(Some(IdleTimeout::try_from(MAX_CLIENT_IDLE_TIMEOUT)?));

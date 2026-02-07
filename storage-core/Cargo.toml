@@ -11,7 +11,6 @@ quinn = "0.11"
 rustls = { version = "0.23", features = ["aws-lc-rs"] }
 anyhow = "1.0.100"
 clap = { version = "4.5.51", features = ["derive"] }
-tracing = "0.1.41"
 rcgen = "0.14.5"
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
