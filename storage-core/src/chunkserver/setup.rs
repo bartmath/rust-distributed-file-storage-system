@@ -4,8 +4,6 @@ use crate::internal::ChunkserverInternal;
 use anyhow::Result;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use quinn::{Endpoint, IdleTimeout};
-use rustls::pki_types::CertificateDer;
-use rustls_platform_verifier::BuilderVerifierExt;
 use std::fs;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -14,6 +12,7 @@ use storage_core::common::config::{
     FINAL_STORAGE_ROOT, HEARTBEAT_INTERVAL, HEARTBEAT_MARGIN, MAX_CLIENT_IDLE_TIMEOUT,
     TMP_STORAGE_ROOT,
 };
+use storage_core::common::configure_client_tls;
 
 pub(crate) fn chunkserver_setup(
     options: ChunkserverOpt,
@@ -73,30 +72,19 @@ pub(crate) fn chunkserver_setup(
     let mut internal_endpoint = Endpoint::server(internal_config, options.internal_socket_addr)
         .expect("Couldn't create internal endpoint");
 
-    let mut client_crypto = rustls::ClientConfig::builder()
-        .with_platform_verifier()
-        .expect("Could not load platform certificates")
-        .with_no_client_auth();
+    let metadata_server_cert_path = options.metadata_server_certificate;
+    #[cfg(debug_assertions)]
+    let metadata_server_cert_path = metadata_server_cert_path.or_else(|| {
+        Some(
+            std::env::current_dir()
+                .expect("Couldn't get current directory")
+                .join("certificates")
+                .join(&options.metadata_server_hostname)
+                .join("cert.der"),
+        )
+    });
 
-    // TODO: Temporary solution to make servers accept self-signed certificates.
-    if options.cert.is_none() {
-        let path = std::env::current_dir()
-            .expect("Couldn't get current directory")
-            .join("certificates")
-            .join(options.metadata_server_hostname.clone());
-        let cert_path = path.join("cert.der");
-        let server_cert_der = std::fs::read(&cert_path).expect("Unable to read certificate");
-        let mut roots = rustls::RootCertStore::empty();
-        roots
-            .add(CertificateDer::from(server_cert_der.as_ref()))
-            .expect("Couldn't add server certificate");
-
-        client_crypto = rustls::ClientConfig::builder()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-    }
-
-    client_crypto.alpn_protocols = common::ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+    let client_crypto = configure_client_tls(metadata_server_cert_path.map(|p| vec![p]))?;
 
     let mut client_transport_config = quinn::TransportConfig::default();
     client_transport_config.max_idle_timeout(Some(IdleTimeout::try_from(MAX_CLIENT_IDLE_TIMEOUT)?));

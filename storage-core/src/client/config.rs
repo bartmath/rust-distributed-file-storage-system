@@ -6,9 +6,9 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[clap(name = "client")]
 pub(super) struct ClientOpt {
-    /// TLS certificate in PEM format
+    /// TLS certificates in DER format to all servers (both metadataserver and all chunkservers)
     #[clap(short = 'c', long = "cert")]
-    pub(super) cert: Option<PathBuf>,
+    pub(super) cert: Vec<PathBuf>,
     /// Address to listen to bind to.
     #[clap(short = 'b', long = "bind-socket-addr", default_value = "[::1]:11111")]
     pub(super) socket_addr: SocketAddr,

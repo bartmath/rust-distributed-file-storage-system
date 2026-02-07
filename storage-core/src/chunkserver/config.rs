@@ -15,10 +15,10 @@ pub(super) struct ChunkserverOpt {
     /// (Relative) path to final directory to save files to.
     #[clap(long = "final-root")]
     pub(super) final_root: PathBuf,
-    /// TLS private key in PEM format
+    /// TLS private key in DER format
     #[clap(short = 'k', long = "key", requires = "cert")]
     pub(super) key: Option<PathBuf>,
-    /// TLS certificate in PEM format
+    /// TLS certificate in DER format
     #[clap(short = 'c', long = "cert", requires = "key")]
     pub(super) cert: Option<PathBuf>,
     /// Chunkserver's hostname for client and other chunkserver to connect to.
@@ -42,6 +42,9 @@ pub(super) struct ChunkserverOpt {
     /// Metadata server address for internal communication.
     #[clap(long = "metadata-server-addr", default_value = "[::1]:4433")]
     pub(super) metadata_server_addr: SocketAddr,
+    /// Metadata server address for internal communication.
+    #[clap(long = "metadata-server-cert")]
+    pub(super) metadata_server_certificate: Option<PathBuf>,
     /// Unique identification of the rack the chunkserver is placed in.
     #[clap(long = "rack-id", default_value = "rack-1")]
     pub(super) rack_id: String,
